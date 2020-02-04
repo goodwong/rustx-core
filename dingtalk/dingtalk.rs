@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use super::access_token::AccessToken;
+use http::Method;
 use reqwest;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::error::Error;
@@ -36,15 +37,6 @@ pub struct Dingtalk {
     pub(crate) cfg: Config,
     pub(crate) access_token: Mutex<AccessToken>,
 }
-pub(super) enum RequestType {
-    Post,
-    Get,
-}
-#[derive(Serialize, Deserialize, Debug)]
-struct ErrorResponse {
-    errcode: Option<i32>,
-    errmsg: Option<String>,
-}
 impl Dingtalk {
     pub fn new(cfg: Config) -> Dingtalk {
         Dingtalk {
@@ -55,7 +47,7 @@ impl Dingtalk {
 
     pub(super) async fn raw_request<T, O>(
         &self,
-        request_type: RequestType,
+        method: Method,
         url: String,
         payload: &T,
     ) -> Result<O, Box<dyn Error>>
@@ -64,9 +56,13 @@ impl Dingtalk {
         O: DeserializeOwned,
     {
         let client = reqwest::Client::new();
-        let builder = match request_type {
-            RequestType::Post => client.post(&url),
-            RequestType::Get => client.get(&url),
+        let builder = match method {
+            Method::POST => client.post(&url),
+            Method::GET => client.get(&url),
+            _ => panic!(
+                "Dingtalk::raw_request do not support this Mehtod type: {}",
+                method
+            ),
         };
         let resp_text = builder.json(payload).send().await?.text().await?;
 
@@ -85,7 +81,7 @@ impl Dingtalk {
     // 自动处理access_token
     async fn request<T, O>(
         &self,
-        request_type: RequestType,
+        method: Method,
         url: String,
         payload: &T,
     ) -> Result<O, Box<dyn Error>>
@@ -98,14 +94,14 @@ impl Dingtalk {
             let access_token = self.access_token().await?;
             url = url.replace("ACCESS_TOKEN", &access_token);
         }
-        self.raw_request(request_type, url, payload).await
+        self.raw_request(method, url, payload).await
     }
 
     pub async fn get<O>(&self, url: String) -> Result<O, Box<dyn Error>>
     where
         O: DeserializeOwned,
     {
-        self.request(RequestType::Get, url, &()).await
+        self.request(Method::GET, url, &()).await
     }
 
     pub async fn post<T, O>(&self, url: String, payload: &T) -> Result<O, Box<dyn Error>>
@@ -113,6 +109,11 @@ impl Dingtalk {
         T: Serialize + ?Sized,
         O: DeserializeOwned,
     {
-        self.request(RequestType::Post, url, payload).await
+        self.request(Method::POST, url, payload).await
     }
+}
+#[derive(Serialize, Deserialize, Debug)]
+struct ErrorResponse {
+    errcode: Option<i32>,
+    errmsg: Option<String>,
 }

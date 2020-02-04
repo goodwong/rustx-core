@@ -44,6 +44,6 @@ pub struct UserRole {
 impl Dingtalk {
     pub async fn user_info(&self, user_id: String) -> Result<UserInfo, Box<dyn Error>> {
         let url = "https://oapi.dingtalk.com/user/get?access_token=ACCESS_TOKEN&userid=USERID";
-        self.post(url.replace("USERID", &user_id), &()).await
+        self.get(url.replace("USERID", &user_id)).await
     }
 }

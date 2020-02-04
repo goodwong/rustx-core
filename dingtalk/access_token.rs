@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
-use super::dingtalk::{Dingtalk, RequestType};
+use super::dingtalk::Dingtalk;
+use http::Method;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::time::{Duration, Instant};
@@ -28,7 +29,7 @@ impl AccessToken {
     }
 }
 #[derive(Serialize, Deserialize, Debug)]
-struct AccessTokenResponse {
+struct Response {
     access_token: String,
 }
 impl Dingtalk {
@@ -38,7 +39,7 @@ impl Dingtalk {
             .replace("KEY", &self.cfg.app_key)
             .replace("SECRET", &self.cfg.app_secret)
             .to_string();
-        let result: AccessTokenResponse = self.raw_request(RequestType::Get, url, &()).await?;
+        let result: Response = self.raw_request(Method::GET, url, &()).await?;
         Ok(result.access_token)
     }
 
