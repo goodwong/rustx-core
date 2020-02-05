@@ -55,6 +55,7 @@ impl Dingtalk {
         T: Serialize + ?Sized,
         O: DeserializeOwned,
     {
+        // request...
         let client = reqwest::Client::new();
         let builder = match method {
             Method::POST => client.post(&url),
@@ -64,17 +65,21 @@ impl Dingtalk {
                 method
             ),
         };
-        let resp_text = builder.json(payload).send().await?.text().await?;
+        let response = builder.json(payload).send().await?.text().await?;
+        println!("raw_request() response: {}", response);
 
-        // check error
-        let error: ErrorResponse = serde_json::from_str(&resp_text)?;
+        // check error...
+        let error: ErrorResponse = serde_json::from_str(&response)?;
         if let Some(errcode) = error.errcode {
             if errcode != 0 {
-                return Err(From::from(error.errmsg.unwrap()));
+                return Err(From::from(
+                    "Api 返回：".to_string() + &error.errmsg.unwrap(),
+                ));
             }
         }
+
         // deserialize...
-        let result: O = serde_json::from_str(&resp_text)?;
+        let result: O = serde_json::from_str(&response)?;
         Ok(result)
     }
 
