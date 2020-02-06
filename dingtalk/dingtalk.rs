@@ -4,10 +4,10 @@ use super::access_token::AccessToken;
 use http::Method;
 use reqwest;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::error::Error;
 use std::sync::Mutex;
+use thiserror::Error as ThisError;
 
-// dingtalk 实例
+// dingtalk 配置
 #[derive(Serialize, Deserialize, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
@@ -33,6 +33,7 @@ impl Config {
     }
 }
 
+// dingtalk 结构
 pub struct Dingtalk {
     pub(crate) cfg: Config,
     pub(crate) access_token: Mutex<AccessToken>,
@@ -50,7 +51,7 @@ impl Dingtalk {
         method: Method,
         url: String,
         payload: &T,
-    ) -> Result<O, Box<dyn Error>>
+    ) -> Result<O, DingtalkError>
     where
         T: Serialize + ?Sized,
         O: DeserializeOwned,
@@ -72,7 +73,7 @@ impl Dingtalk {
         let error: ErrorResponse = serde_json::from_str(&response)?;
         if let Some(errcode) = error.errcode {
             if errcode != 0 {
-                return Err(From::from(
+                return Err(DingtalkError::Other(
                     "Api 返回：".to_string() + &error.errmsg.unwrap(),
                 ));
             }
@@ -89,7 +90,7 @@ impl Dingtalk {
         method: Method,
         url: String,
         payload: &T,
-    ) -> Result<O, Box<dyn Error>>
+    ) -> Result<O, DingtalkError>
     where
         T: Serialize + ?Sized,
         O: DeserializeOwned,
@@ -102,14 +103,14 @@ impl Dingtalk {
         self.raw_request(method, url, payload).await
     }
 
-    pub async fn get<O>(&self, url: String) -> Result<O, Box<dyn Error>>
+    pub async fn get<O>(&self, url: String) -> Result<O, DingtalkError>
     where
         O: DeserializeOwned,
     {
         self.request(Method::GET, url, &()).await
     }
 
-    pub async fn post<T, O>(&self, url: String, payload: &T) -> Result<O, Box<dyn Error>>
+    pub async fn post<T, O>(&self, url: String, payload: &T) -> Result<O, DingtalkError>
     where
         T: Serialize + ?Sized,
         O: DeserializeOwned,
@@ -117,8 +118,25 @@ impl Dingtalk {
         self.request(Method::POST, url, payload).await
     }
 }
+
+// api错误结构
 #[derive(Serialize, Deserialize, Debug)]
 struct ErrorResponse {
     errcode: Option<i32>,
     errmsg: Option<String>,
+}
+
+// 错误类型
+#[derive(ThisError, Debug)]
+pub enum DingtalkError {
+    #[error(transparent)]
+    Reqwest(#[from] reqwest::Error),
+    #[error(transparent)]
+    Serde(#[from] serde_json::Error),
+    #[error("Dingtalk Error InvalidAccessToken")]
+    InvalidAccessToken,
+    #[error("Dingtalk Error SystemBusy")]
+    SystemBusy,
+    #[error("Dingtalk Error:")]
+    Other(String),
 }

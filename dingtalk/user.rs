@@ -1,9 +1,8 @@
 #![allow(dead_code)]
 
-use super::dingtalk::Dingtalk;
+use super::dingtalk::{Dingtalk, DingtalkError};
 use serde::{Deserialize, Serialize};
 // use std::collections::HashMap;
-use std::error::Error;
 
 // 钉钉接口返回的类型定义
 #[derive(Serialize, Deserialize, Debug)]
@@ -43,7 +42,7 @@ pub struct UserRole {
 }
 
 impl Dingtalk {
-    pub async fn user_info(&self, user_id: String) -> Result<UserInfo, Box<dyn Error>> {
+    pub async fn user_info(&self, user_id: String) -> Result<UserInfo, DingtalkError> {
         let url = "https://oapi.dingtalk.com/user/get?access_token=ACCESS_TOKEN&userid=USERID";
         self.get(url.replace("USERID", &user_id)).await
     }

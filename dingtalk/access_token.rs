@@ -1,9 +1,8 @@
 #![allow(dead_code)]
 
-use super::dingtalk::Dingtalk;
+use super::dingtalk::{Dingtalk, DingtalkError};
 use http::Method;
 use serde::{Deserialize, Serialize};
-use std::error::Error;
 use std::time::{Duration, Instant};
 
 #[derive(Debug)]
@@ -33,7 +32,7 @@ struct Response {
     access_token: String,
 }
 impl Dingtalk {
-    async fn fetch_access_token(&self) -> Result<String, Box<dyn Error>> {
+    async fn fetch_access_token(&self) -> Result<String, DingtalkError> {
         let url = "https://oapi.dingtalk.com/gettoken?appkey=KEY&appsecret=SECRET";
         let url = url
             .replace("KEY", &self.cfg.app_key)
@@ -43,7 +42,7 @@ impl Dingtalk {
         Ok(result.access_token)
     }
 
-    pub async fn access_token(&self) -> Result<String, Box<dyn Error>> {
+    pub async fn access_token(&self) -> Result<String, DingtalkError> {
         let mut access_token = self.access_token.lock().unwrap();
         if !access_token.valid() {
             let new_token = self.fetch_access_token().await?;
