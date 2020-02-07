@@ -71,11 +71,14 @@ impl Dingtalk {
 
         // check error...
         let error: ErrorResponse = serde_json::from_str(&response)?;
-        if let Some(errcode) = error.errcode {
-            if errcode != 0 {
+        match error.errcode {
+            0 => (),
+            -1 => return Err(DingtalkError::SystemBusy),
+            40001 | 40014 | 41001 => return Err(DingtalkError::InvalidAccessToken),
+            _ => {
                 return Err(DingtalkError::Other(
-                    "Api 返回：".to_string() + &error.errmsg.unwrap(),
-                ));
+                    "Api 返回：".to_string() + &error.errmsg,
+                ))
             }
         }
 
@@ -95,12 +98,33 @@ impl Dingtalk {
         T: Serialize + ?Sized,
         O: DeserializeOwned,
     {
-        let mut url = url;
-        if url.contains("ACCESS_TOKEN") {
-            let access_token = self.access_token().await?;
-            url = url.replace("ACCESS_TOKEN", &access_token);
-        }
-        self.raw_request(method, url, payload).await
+        // auto retry...
+        let mut retry = 0;
+        return loop {
+            // get access_token
+            let mut url = url.clone();
+            if url.contains("ACCESS_TOKEN") {
+                let access_token = self.access_token().await?;
+                url = url.replace("ACCESS_TOKEN", &access_token);
+            }
+            let result = self.raw_request(method.clone(), url.clone(), payload).await;
+
+            retry += 1;
+            if retry > 2 {
+                break result;
+            }
+
+            match &result {
+                Err(DingtalkError::InvalidAccessToken) => {
+                    self.reset_access_token();
+                }
+                Err(DingtalkError::SystemBusy) => {
+                    continue;
+                }
+                Ok(_) => break result,
+                Err(_) => break result,
+            }
+        };
     }
 
     pub async fn get<O>(&self, url: String) -> Result<O, DingtalkError>
@@ -122,8 +146,8 @@ impl Dingtalk {
 // api错误结构
 #[derive(Serialize, Deserialize, Debug)]
 struct ErrorResponse {
-    errcode: Option<i32>,
-    errmsg: Option<String>,
+    errcode: i32,
+    errmsg: String,
 }
 
 // 错误类型

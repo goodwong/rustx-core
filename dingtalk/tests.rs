@@ -1,3 +1,4 @@
+use super::access_token::AccessToken;
 use super::dingtalk::{Config, Dingtalk};
 use tokio::runtime::Runtime;
 
@@ -26,5 +27,19 @@ fn get_user_info() {
     rt.block_on(async move {
         let user_info = dd.user_info("manager7140".to_string()).await.unwrap();
         println!("user_info: {:#?}", user_info);
+    });
+}
+
+#[test]
+fn auto_refresh_access_token() {
+    let dd = Dingtalk::new(Config::from_env());
+    {
+        let mut access_token = dd.access_token.lock().unwrap();
+        *access_token = AccessToken::new("asdfasdfkajslkdfjals".to_string());
+    }
+
+    let mut rt = Runtime::new().unwrap();
+    rt.block_on(async move {
+        let _ = dd.user_info("manager7140".to_string()).await.unwrap();
     });
 }

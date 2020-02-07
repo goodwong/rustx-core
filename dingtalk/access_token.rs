@@ -27,6 +27,7 @@ impl AccessToken {
         self.expired_at > Instant::now() + Duration::from_secs(10)
     }
 }
+
 #[derive(Serialize, Deserialize, Debug)]
 struct Response {
     access_token: String,
@@ -49,5 +50,10 @@ impl Dingtalk {
             *access_token = AccessToken::new(new_token);
         }
         return Ok(access_token.token.to_string());
+    }
+
+    pub fn reset_access_token(&self) {
+        let mut access_token = self.access_token.lock().unwrap();
+        *access_token = AccessToken::default();
     }
 }
