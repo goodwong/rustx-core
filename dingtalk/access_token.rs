@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use super::dingtalk::{Dingtalk, DingtalkError};
 use http::Method;
 use serde::{Deserialize, Serialize};

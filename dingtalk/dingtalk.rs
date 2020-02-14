@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use super::access_token::AccessToken;
 use http::Method;
 use reqwest;
