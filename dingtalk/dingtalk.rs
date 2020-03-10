@@ -114,6 +114,8 @@ impl Dingtalk {
 
             match &result {
                 Err(DingtalkError::InvalidAccessToken) => {
+                    //todo 避免重复reset
+                    //可考虑将当前token传入，如比较后发现token已经变化，则不再reset
                     self.reset_access_token();
                 }
                 Err(DingtalkError::SystemBusy) => {
