@@ -50,8 +50,14 @@ impl Dingtalk {
         return Ok(access_token.token.to_string());
     }
 
-    pub fn reset_access_token(&self) {
+    pub fn reset_access_token(&self, old_token: String) {
         let mut access_token = self.access_token.lock().unwrap();
-        *access_token = AccessToken::default();
+        // 再次判断，避免排队reset
+        // 如token已经变化，
+        // 说明中间(因为锁，可能需要等待很久)有其他进程reset或fetch过这个token了，
+        // 则不再reset
+        if access_token.token == old_token {
+            *access_token = AccessToken::default();
+        }
     }
 }

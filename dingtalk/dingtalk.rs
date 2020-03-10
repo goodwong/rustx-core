@@ -16,15 +16,24 @@ pub struct Config {
 }
 impl Config {
     pub fn from_env() -> Config {
+        use dotenv::dotenv;
         use std::env;
-        let corp_id = env::var("DINGTALK_CORP_ID").unwrap();
-        let agent_id = env::var("DINGTALK_AGENT_ID").unwrap();
-        let app_key = env::var("DINGTALK_APP_KEY").unwrap();
-        let app_secret = env::var("DINGTALK_APP_SECRET").unwrap();
+
+        dotenv().ok();
+        let corp_id = env::var("DINGTALK_CORP_ID")
+            .expect("value `DINGTALK_CORP_ID` not presented in .env file");
+        let agent_id = env::var("DINGTALK_AGENT_ID")
+            .expect("value `DINGTALK_AGENT_ID` not presented in .env file")
+            .parse()
+            .expect("value `DINGTALK_AGENT_ID` in .env file is not a valid integer");
+        let app_key = env::var("DINGTALK_APP_KEY")
+            .expect("value `DINGTALK_APP_KEY` not presented in .env file");
+        let app_secret = env::var("DINGTALK_APP_SECRET")
+            .expect("value `DINGTALK_APP_SECRET` not presented in .env file");
 
         Config {
             corp_id,
-            agent_id: agent_id.parse().unwrap(),
+            agent_id,
             app_key,
             app_secret,
         }
@@ -100,11 +109,12 @@ impl Dingtalk {
         let mut retry = 0;
         return loop {
             // get access_token
-            let mut url = url.clone();
-            if url.contains("ACCESS_TOKEN") {
-                let access_token = self.access_token().await?;
-                url = url.replace("ACCESS_TOKEN", &access_token);
-            }
+            let access_token = if url.contains("ACCESS_TOKEN") {
+                self.access_token().await?
+            } else {
+                "".to_string()
+            };
+            let url = url.clone().replace("ACCESS_TOKEN", &access_token);
             let result = self.raw_request(method.clone(), url.clone(), payload).await;
 
             retry += 1;
@@ -112,11 +122,10 @@ impl Dingtalk {
                 break result;
             }
 
+            // 除了无效token和系统繁忙需要进入重试，其它情况无论成功与否都退出循环
             match &result {
                 Err(DingtalkError::InvalidAccessToken) => {
-                    //todo 避免重复reset
-                    //可考虑将当前token传入，如比较后发现token已经变化，则不再reset
-                    self.reset_access_token();
+                    self.reset_access_token(access_token);
                 }
                 Err(DingtalkError::SystemBusy) => {
                     continue;
