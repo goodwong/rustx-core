@@ -1,6 +1,5 @@
 use super::access_token::AccessToken;
 use super::dingtalk::{Config, Dingtalk};
-use tokio::runtime::Runtime;
 
 #[test]
 fn read_config_from_env() {

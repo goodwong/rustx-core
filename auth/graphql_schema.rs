@@ -1,10 +1,7 @@
-use crate::db_connection::PgPool;
 use super::models::User as UserModel;
-use chrono::prelude::*;
+use crate::db_connection::{PgPool, PgPooledConnection};
 use diesel::prelude::*;
 use juniper;
-use std::sync::Arc;
-use std::time::Duration;
 use tokio::{self, task};
 
 pub struct Context {
@@ -56,7 +53,7 @@ pub struct QueryRoot;
 impl QueryRoot {
     #[doc = "获取所有的用户名单"]
     async fn all_users(context: &Context) -> Vec<User> {
-        let conn = context.pool.get().expect("获取数据库连接失败");
+        let conn: PgPooledConnection = context.pool.get().expect("获取数据库连接失败");
         task::spawn_blocking(move || {
             use crate::diesel_schema::users::dsl::*;
             users
