@@ -1,5 +1,6 @@
 use chrono::prelude::*;
 
+// 用户
 #[derive(Queryable)]
 pub struct User {
     pub id: i32,
@@ -10,6 +11,7 @@ pub struct User {
     pub updated_at: DateTime<Utc>,
 }
 
+// 用户认证方式，如密码、短信验证码、第三方验证等
 #[derive(Queryable)]
 pub struct UserIdentity {
     pub user_id: i32,
@@ -18,6 +20,7 @@ pub struct UserIdentity {
     pub data: Option<String>,
 }
 
+// 用户登录时生成的token
 #[derive(Queryable)]
 pub struct UserToken {
     pub id: i32,

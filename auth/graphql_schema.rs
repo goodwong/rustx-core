@@ -1,8 +1,8 @@
 use super::models::User as UserModel;
+use super::repository::all_users;
 use crate::db_connection::{PgPool, PgPooledConnection};
-use diesel::prelude::*;
 use juniper;
-use tokio::{self, task};
+use juniper::FieldResult;
 
 pub struct Context {
     pub pool: PgPool,
@@ -52,20 +52,13 @@ pub struct QueryRoot;
 #[juniper::graphql_object(Context = Context)]
 impl QueryRoot {
     #[doc = "获取所有的用户名单"]
-    async fn all_users(context: &Context) -> Vec<User> {
+    async fn all_users(context: &Context) -> FieldResult<Vec<User>> {
         let conn: PgPooledConnection = context.pool.get().expect("获取数据库连接失败");
-        task::spawn_blocking(move || {
-            use crate::diesel_schema::users::dsl::*;
-            users
-                .limit(20)
-                .load::<UserModel>(&conn)
-                .expect("Error loading users")
-                .into_iter()
-                .map(|u| User::from(u))
-                .collect()
-        })
-        .await
-        .unwrap()
+        Ok(all_users(conn)
+            .await?
+            .into_iter()
+            .map(|u| User::from(u))
+            .collect())
     }
 }
 
