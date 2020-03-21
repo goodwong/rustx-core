@@ -1,4 +1,4 @@
-use super::dingtalk::{Dingtalk, DingtalkError};
+use super::{Dingtalk, DingtalkError};
 use serde::{Deserialize, Serialize};
 // use std::collections::HashMap;
 

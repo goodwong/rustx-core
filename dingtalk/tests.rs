@@ -1,5 +1,5 @@
 use super::access_token::AccessToken;
-use super::dingtalk::{Config, Dingtalk};
+use super::{Config, Dingtalk};
 
 #[test]
 fn read_config_from_env() {

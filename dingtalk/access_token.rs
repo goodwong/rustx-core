@@ -1,4 +1,4 @@
-use super::dingtalk::{Dingtalk, DingtalkError};
+use super::{Dingtalk, DingtalkError};
 use http::Method;
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
@@ -35,8 +35,7 @@ impl Dingtalk {
         let url = "https://oapi.dingtalk.com/gettoken?appkey=KEY&appsecret=SECRET";
         let url = url
             .replace("KEY", &self.cfg.app_key)
-            .replace("SECRET", &self.cfg.app_secret)
-            .to_string();
+            .replace("SECRET", &self.cfg.app_secret);
         let result: Response = self.raw_request(Method::GET, url, &()).await?;
         Ok(result.access_token)
     }
@@ -47,7 +46,7 @@ impl Dingtalk {
             let new_token = self.fetch_access_token().await?;
             *access_token = AccessToken::new(new_token);
         }
-        return Ok(access_token.token.to_string());
+        Ok(access_token.token.to_string())
     }
 
     pub fn reset_access_token(&self, old_token: String) {
