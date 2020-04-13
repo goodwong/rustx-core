@@ -1,6 +1,5 @@
 use super::models::User as UserModel;
-use super::repository::all_users;
-use crate::db_connection::{PgPool, PgPooledConnection};
+use crate::db_connection::PgPool;
 use juniper;
 use juniper::FieldResult;
 
@@ -51,24 +50,28 @@ impl From<UserModel> for User {
 pub struct QueryRoot;
 #[juniper::graphql_object(Context = Context)]
 impl QueryRoot {
-    #[doc = "获取所有的用户名单"]
-    async fn all_users(context: &Context) -> FieldResult<Vec<User>> {
-        let conn: PgPooledConnection = context.pool.get().expect("获取数据库连接失败");
-        Ok(all_users(conn)
-            .await?
-            .into_iter()
-            .map(|u| User::from(u))
-            .collect())
+    #[doc = "根据session获取当前用户信息"]
+    async fn me() -> FieldResult<User> {
+        todo!()
     }
 }
 
 pub struct MutationRoot;
 #[juniper::graphql_object(Context = Context)]
 impl MutationRoot {
-    #[graphql(description = "注销登陆态")]
+    #[doc = "登陆"]
+    async fn login() -> bool {
+        todo!()
+    }
+
+    #[doc = "续约"]
+    async fn renew() -> bool {
+        todo!()
+    }
+
+    #[doc = "注销登陆态"]
     async fn logout() -> bool {
-        // 占位
-        false
+        todo!()
     }
 }
 
