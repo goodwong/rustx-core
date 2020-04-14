@@ -18,13 +18,13 @@ pub struct Config {
     pub db: PgPool,
     pub cipher_key: [u8; KEY_LENGTH],
 }
-impl<'a> AuthService {
+impl AuthService {
     /// 初始化，一般在main.rs里
     /// Panics：1. 秘钥长度不对
     /// ```rs
     /// let auth = ::authenticate::AuthService::new(db_pool, cipher_key);
     /// ```
-    pub fn new(db: PgPool, key: &'static str) -> Self {
+    pub fn new(db: PgPool, key: String) -> Self {
         use std::convert::TryInto;
         Self {
             config: Config {
@@ -235,23 +235,31 @@ mod tests {
     use super::super::repository::{create_refresh_token, create_user, InsertToken, InsertUser};
     use super::super::token::{Token, TOKEN_LIFE_HOURS};
     use super::{AuthService, TokenResponse};
-    use crate::db_connection::establish_connection;
+    use crate::db_connection::{establish_connection, PgPool};
     use chrono::{Duration, Utc};
+    use dotenv::dotenv;
+    use std::env;
+
+    fn db_pool() -> PgPool {
+        dotenv().ok();
+        let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+        establish_connection(database_url)
+    }
 
     #[test]
     #[should_panic]
     fn new_auth_service_invalid_cipher_key() {
-        let pool = establish_connection();
+        let pool = db_pool();
         // should be panicked here
         // because of invalid key length
-        AuthService::new(pool, "invalid key length");
+        AuthService::new(pool, "invalid key length".to_string());
     }
 
     #[tokio::test]
     async fn test_login() {
-        let pool = establish_connection();
+        let pool = db_pool();
         let cipher_key = "12345678_2345678_2345678_2345678";
-        let auth = AuthService::new(pool.clone(), cipher_key);
+        let auth = AuthService::new(pool.clone(), cipher_key.to_string());
         // 构建一个测试user
         let user = {
             let conn = pool.get().unwrap();

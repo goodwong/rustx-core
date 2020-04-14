@@ -88,13 +88,13 @@ token：
 ```rs
 // 初始化，一般在main.rs里
 // Panics：1. 秘钥长度不对
-let auth = ::authenticate::AuthService::new(db_pool, cipher_key); 
+let auth_service = ::authenticate::AuthService::new(db_pool, cipher_key); 
 
 // 实例化
 // 一般是在 http handler里处理
 // 此identity可以放入graphql的context参数结构里去
 // error: 一般是数据库连接问题，可以返回500
-let identity = auth.from_request(token).await?; // req or cookie?
+let identity = auth_service.get_identity(token).await?; // req or cookie?
 
 
 // 判断、获取数据
