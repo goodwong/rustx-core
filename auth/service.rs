@@ -7,6 +7,8 @@ use super::repository::{
 };
 use super::token::{Token, KEY_LENGTH};
 use crate::db_connection::PgPool;
+
+use base64;
 use chrono::{DateTime, Utc};
 use diesel::result::Error::NotFound;
 
@@ -24,15 +26,17 @@ impl AuthService {
     /// ```rs
     /// let auth = ::authenticate::AuthService::new(db_pool, cipher_key);
     /// ```
-    pub fn new(db: PgPool, key: String) -> Self {
+    pub fn new(db: PgPool, base64_encoded_key: &str) -> Self {
         use std::convert::TryInto;
+        let cipher_key =
+            base64::decode(base64_encoded_key).expect("CIPHER_KEY must be base64 encoded");
+
         Self {
             config: Config {
                 db,
-                cipher_key: key
-                    .as_bytes()
+                cipher_key: cipher_key[..]
                     .try_into()
-                    .unwrap_or_else(|_| panic!("cipher_key length should be {}", KEY_LENGTH)),
+                    .unwrap_or_else(|_| panic!("cipher key LENGTH should be {}", KEY_LENGTH)),
             },
         }
     }
@@ -174,7 +178,7 @@ impl Identity {
         }
     }
     // 输出cookie
-    pub(super) fn to_response(&self) -> Option<TokenResponse> {
+    pub fn to_response(&self) -> Option<TokenResponse> {
         self.response.clone()
     }
     fn with_none(config: Config) -> Self {
@@ -252,14 +256,14 @@ mod tests {
         let pool = db_pool();
         // should be panicked here
         // because of invalid key length
-        AuthService::new(pool, "invalid key length".to_string());
+        AuthService::new(pool, "invalid key length");
     }
 
     #[tokio::test]
     async fn test_login() {
         let pool = db_pool();
         let cipher_key = "12345678_2345678_2345678_2345678";
-        let auth = AuthService::new(pool.clone(), cipher_key.to_string());
+        let auth = AuthService::new(pool.clone(), cipher_key);
         // 构建一个测试user
         let user = {
             let conn = pool.get().unwrap();

@@ -1,15 +1,20 @@
 use super::models::User as UserModel;
+use super::repository::find_user;
+use crate::auth::service::Identity;
 use crate::db_connection::PgPool;
+
 use juniper;
 use juniper::FieldResult;
+use std::sync::Arc;
 
 pub struct Context {
     pub pool: PgPool,
+    pub identity: Arc<Identity>,
 }
 impl juniper::Context for Context {}
 impl Context {
-    pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+    pub fn new(pool: PgPool, identity: Arc<Identity>) -> Self {
+        Self { pool, identity }
     }
 }
 
@@ -51,8 +56,14 @@ pub struct QueryRoot;
 #[juniper::graphql_object(Context = Context)]
 impl QueryRoot {
     #[doc = "根据session获取当前用户信息"]
-    async fn me() -> FieldResult<User> {
-        todo!()
+    async fn me(context: &mut Context) -> FieldResult<User> {
+        let mut identity = context.identity.clone();
+        let identity = Arc::get_mut(&mut identity).ok_or("获取锁失败")?;
+        identity
+            .user()
+            .await
+            .map(|u| User::from(u))
+            .ok_or("未登录".into())
     }
 }
 
@@ -60,13 +71,16 @@ pub struct MutationRoot;
 #[juniper::graphql_object(Context = Context)]
 impl MutationRoot {
     #[doc = "登陆"]
-    async fn login() -> bool {
-        todo!()
-    }
+    async fn login(context: &mut Context) -> FieldResult<bool> {
+        let mut identity = context.identity.clone();
+        let identity = Arc::get_mut(&mut identity).ok_or("获取锁失败")?;
 
-    #[doc = "续约"]
-    async fn renew() -> bool {
-        todo!()
+        let user = find_user(1, context.pool.get()?).await?;
+        identity
+            .login(user)
+            .await
+            .map(|_| true)
+            .map_err(|_| "无法登陆".into())
     }
 
     #[doc = "注销登陆态"]
