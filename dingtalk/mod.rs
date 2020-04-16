@@ -10,7 +10,7 @@ use access_token::AccessToken;
 use http::Method;
 use reqwest;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::sync::Mutex;
+use std::sync::Mutex; // todo 改用tokio::sync::RwLock
 use thiserror::Error as ThisError;
 
 // dingtalk 配置
@@ -82,7 +82,7 @@ impl Dingtalk {
             ),
         };
         let response = builder.json(payload).send().await?.text().await?;
-        println!("raw_request() response: {}", response);
+        debug!("raw_request() response: {}", response);
 
         // check error...
         let error: ErrorResponse = serde_json::from_str(&response)?;
