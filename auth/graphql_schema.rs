@@ -56,14 +56,13 @@ pub struct QueryRoot;
 #[juniper::graphql_object(Context = Context)]
 impl QueryRoot {
     #[doc = "根据session获取当前用户信息"]
-    async fn me(context: &mut Context) -> FieldResult<User> {
-        let mut identity = context.identity.clone();
-        let identity = Arc::get_mut(&mut identity).ok_or("获取锁失败")?;
-        identity
+    async fn me(context: &Context) -> FieldResult<User> {
+        context
+            .identity
             .user()
             .await
-            .map(|u| User::from(u))
-            .ok_or("未登录".into())
+            .map(User::from)
+            .ok_or_else(|| "未登录".into())
     }
 }
 
@@ -71,12 +70,10 @@ pub struct MutationRoot;
 #[juniper::graphql_object(Context = Context)]
 impl MutationRoot {
     #[doc = "登陆"]
-    async fn login(context: &mut Context) -> FieldResult<bool> {
-        let mut identity = context.identity.clone();
-        let identity = Arc::get_mut(&mut identity).ok_or("获取锁失败")?;
-
+    async fn login(context: &Context) -> FieldResult<bool> {
         let user = find_user(1, context.pool.get()?).await?;
-        identity
+        context
+            .identity
             .login(user)
             .await
             .map(|_| true)

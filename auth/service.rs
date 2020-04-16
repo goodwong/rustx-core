@@ -11,6 +11,7 @@ use crate::db_connection::PgPool;
 use base64;
 use chrono::{DateTime, Utc};
 use diesel::result::Error::NotFound;
+use tokio::sync::RwLock;
 
 pub struct AuthService {
     config: Config,
@@ -52,24 +53,24 @@ impl AuthService {
 
 pub struct Identity {
     config: Config,
-    token: Option<Token>,
-    user: Option<User>,
-    response: Option<TokenResponse>,
+    token: RwLock<Option<Token>>,
+    user: RwLock<Option<User>>,
+    response: RwLock<Option<TokenResponse>>,
 }
 // 开放api
 impl Identity {
     // 是否登录
-    pub fn is_login(&self) -> bool {
-        self.token.is_some()
+    pub async fn is_login(&self) -> bool {
+        self.get_token().await.is_some()
     }
 
     // 返回登录用户的id
-    pub fn user_id(&self) -> Option<i32> {
-        self.token.as_ref().map(|t| t.user_id as i32)
+    pub async fn user_id(&self) -> Option<i32> {
+        self.get_token().await.map(|t| t.user_id as i32)
     }
 
     // 试图从数据库查询登陆的用户，并记住
-    pub async fn user(&mut self) -> Option<User> {
+    pub async fn user(&self) -> Option<User> {
         // 有await，这个写法不行
         //self.user.or_else(|| {
         //    self.token.map(async move |t| {
@@ -78,22 +79,24 @@ impl Identity {
         //    })
         //})
 
-        match &self.user {
-            Some(_) => self.user.clone(),
-            None => match &self.token {
-                Some(t) => {
-                    let uid = t.user_id as i32;
-                    let conn = self.config.db.get().ok()?;
-                    self.user = find_user(uid, conn).await.ok();
-                    self.user.clone()
-                }
-                _ => None,
-            },
+        let exist = self.get_user().await;
+        if exist.is_some() {
+            return exist;
+        }
+
+        if let Some(token) = self.get_token().await {
+            let uid = token.user_id as i32;
+            let conn = self.config.db.get().ok()?;
+            let user: Option<User> = find_user(uid, conn).await.ok();
+            self.set_user(user.clone()).await;
+            user
+        } else {
+            None
         }
     }
 
     // 登陆（在具体登陆的方式里调用该方法）
-    pub async fn login(&mut self, user: User) -> AuthResult<()> {
+    pub async fn login(&self, user: User) -> AuthResult<()> {
         // token
         let (nonce, hash) = Token::nonce_pair();
         let insert = InsertToken {
@@ -112,19 +115,20 @@ impl Identity {
         };
         // mut self
         let (token_str, expires) = token.to_string(&self.config.cipher_key)?;
-        self.response = Some(TokenResponse::Set(token_str, expires));
-        self.token = Some(token);
-        self.user = Some(user);
+        self.set_response(Some(TokenResponse::Set(token_str, expires)))
+            .await;
+        self.set_token(Some(token)).await;
+        self.set_user(Some(user)).await;
 
         Ok(())
     }
 
     // 登出
-    pub async fn logout(&mut self) -> AuthResult<()> {
+    pub async fn logout(&self) -> AuthResult<()> {
         // 1. delete token in db
         let refresh_token_id = self
-            .token
-            .as_ref()
+            .get_token()
+            .await
             .map(|t| t.refresh_token_id as i32)
             .ok_or("empty token")?;
         let conn = self.config.db.get()?;
@@ -139,14 +143,17 @@ impl Identity {
         //      如果cache容量不足，可以将start_timestamp调后
         // ...
 
-        // 3. response delete cookie
-        self.response = Some(TokenResponse::Delete);
-
-        // 4. reset self
-        self.user = None;
-        self.token = None;
+        // 3. set state
+        self.set_response(Some(TokenResponse::Delete)).await;
+        self.set_user(None).await;
+        self.set_token(None).await;
 
         Ok(())
+    }
+
+    // 输出cookie
+    pub async fn to_response(&self) -> Option<TokenResponse> {
+        self.get_response().await
     }
 }
 // 内部方法
@@ -177,32 +184,28 @@ impl Identity {
             }
         }
     }
-    // 输出cookie
-    pub fn to_response(&self) -> Option<TokenResponse> {
-        self.response.clone()
-    }
     fn with_none(config: Config) -> Self {
         Self {
             config,
-            token: None,
-            user: None,
-            response: None,
+            token: RwLock::new(None),
+            user: RwLock::new(None),
+            response: RwLock::new(None),
         }
     }
     fn with_invalid_token(config: Config) -> Self {
         Self {
             config,
-            token: None,
-            user: None,
-            response: Some(TokenResponse::Delete),
+            token: RwLock::new(None),
+            user: RwLock::new(None),
+            response: RwLock::new(Some(TokenResponse::Delete)),
         }
     }
     fn with_token(t: Token, config: Config) -> Self {
         Self {
             config,
-            token: Some(t),
-            user: None,
-            response: None,
+            token: RwLock::new(Some(t)),
+            user: RwLock::new(None),
+            response: RwLock::new(None),
         }
     }
     async fn with_renew(t: Token, config: Config) -> AuthResult<Self> {
@@ -221,10 +224,31 @@ impl Identity {
         let (token_str, expires) = token.to_string(&config.cipher_key)?;
         Ok(Self {
             config,
-            token: Some(token),
-            user: None,
-            response: Some(TokenResponse::Set(token_str, expires)),
+            token: RwLock::new(Some(token)),
+            user: RwLock::new(None),
+            response: RwLock::new(Some(TokenResponse::Set(token_str, expires))),
         })
+    }
+
+    async fn get_user(&self) -> Option<User> {
+        self.user.read().await.clone()
+    }
+    async fn set_user(&self, user: Option<User>) {
+        *self.user.write().await = user;
+    }
+
+    async fn get_token(&self) -> Option<Token> {
+        *self.token.read().await
+    }
+    async fn set_token(&self, token: Option<Token>) {
+        *self.token.write().await = token;
+    }
+
+    async fn get_response(&self) -> Option<TokenResponse> {
+        self.response.read().await.clone()
+    }
+    async fn set_response(&self, response: Option<TokenResponse>) {
+        *self.response.write().await = response;
     }
 }
 
@@ -262,7 +286,7 @@ mod tests {
     #[tokio::test]
     async fn test_login() {
         let pool = db_pool();
-        let cipher_key = "12345678_2345678_2345678_2345678";
+        let cipher_key = "Q+mvRWovv4NHANIuevkXtAmC3r2wp8bjyrKCPTgm7m0=";
         let auth = AuthService::new(pool.clone(), cipher_key);
         // 构建一个测试user
         let user = {
@@ -276,37 +300,40 @@ mod tests {
         };
 
         // 测试一：无效token
-        let mut id = auth.get_identity("an invalid token").await.unwrap();
-        assert_eq!(id.is_login(), false);
-        assert_eq!(id.user_id(), None);
+        let id = auth.get_identity("an invalid token").await.unwrap();
+        assert_eq!(id.is_login().await, false);
+        assert_eq!(id.user_id().await, None);
         assert_eq!(id.user().await, None);
-        assert_eq!(id.to_response(), Some(TokenResponse::Delete));
+        assert_eq!(id.to_response().await, Some(TokenResponse::Delete));
 
         // 测试三：登陆
         id.login(user.clone()).await.unwrap();
-        assert_eq!(id.is_login(), true);
-        assert_eq!(user.id, id.user_id().unwrap());
+        assert_eq!(id.is_login().await, true);
+        assert_eq!(user.id, id.user_id().await.unwrap());
         assert_eq!(user, id.user().await.unwrap());
-        assert!(matches!(id.to_response(), Some(TokenResponse::Set(_, _))));
-        println!("token: {:?}", id.to_response().unwrap());
-        let _token_str = match id.to_response() {
+        assert!(matches!(
+            id.to_response().await,
+            Some(TokenResponse::Set(_, _))
+        ));
+        println!("token: {:?}", id.to_response().await.unwrap());
+        let _token_str = match id.to_response().await {
             Some(TokenResponse::Set(t, _)) => t,
             _ => "".to_string(),
         };
 
         // 测试四：登出
         id.logout().await.unwrap();
-        assert_eq!(id.is_login(), false);
-        assert_eq!(id.user_id(), None);
+        assert_eq!(id.is_login().await, false);
+        assert_eq!(id.user_id().await, None);
         assert_eq!(id.user().await, None);
-        assert_eq!(id.to_response(), Some(TokenResponse::Delete));
+        assert_eq!(id.to_response().await, Some(TokenResponse::Delete));
 
         // 测试五：使用登出的token（主动失效的token）
         // todo 登出后token应该失效
         /*
-        let mut id = auth.get_identity(&_token_str).await.unwrap();
-        assert_eq!(id.is_login(), false);
-        assert_eq!(id.user_id(), None);
+        let id = auth.get_identity(&_token_str).await.unwrap();
+        assert_eq!(id.is_login().await, false);
+        assert_eq!(id.user_id().await, None);
         assert_eq!(id.user().await, None);
         assert_eq!(id.to_response(), Some(TokenResponse::Delete));
         */
@@ -325,11 +352,11 @@ mod tests {
             .unwrap();
             token_str
         };
-        let mut id = auth.get_identity(&token_str).await.unwrap();
-        assert_eq!(id.is_login(), true);
-        assert_eq!(user.id, id.user_id().unwrap());
+        let id = auth.get_identity(&token_str).await.unwrap();
+        assert_eq!(id.is_login().await, true);
+        assert_eq!(user.id, id.user_id().await.unwrap());
         assert_eq!(user, id.user().await.unwrap());
-        assert_eq!(id.to_response(), None);
+        assert_eq!(id.to_response().await, None);
 
         // 测试六：过期的token（renew）
         let token_str = {
@@ -356,12 +383,15 @@ mod tests {
             let (token_str, _) = token.to_string(&auth.config.cipher_key).unwrap();
             token_str
         };
-        let mut id = auth.get_identity(&token_str).await.unwrap();
-        assert_eq!(id.is_login(), true);
-        assert_eq!(user.id, id.user_id().unwrap());
+        let id = auth.get_identity(&token_str).await.unwrap();
+        assert_eq!(id.is_login().await, true);
+        assert_eq!(user.id, id.user_id().await.unwrap());
         assert_eq!(user, id.user().await.unwrap());
-        assert!(matches!(id.to_response(), Some(TokenResponse::Set(_, _))));
-        if let Some(TokenResponse::Set(new_token_str, _)) = id.to_response() {
+        assert!(matches!(
+            id.to_response().await,
+            Some(TokenResponse::Set(_, _))
+        ));
+        if let Some(TokenResponse::Set(new_token_str, _)) = id.to_response().await {
             println!("renew token:");
             println!("old token: {}", token_str);
             println!("new token: {}", new_token_str);
@@ -369,10 +399,10 @@ mod tests {
 
         // 测试七：再次使用renew前的token
         // 旧的token应该失效
-        let mut id = auth.get_identity(&token_str).await.unwrap();
-        assert_eq!(id.is_login(), false);
-        assert_eq!(id.user_id(), None);
+        let id = auth.get_identity(&token_str).await.unwrap();
+        assert_eq!(id.is_login().await, false);
+        assert_eq!(id.user_id().await, None);
         assert_eq!(id.user().await, None);
-        assert_eq!(id.to_response(), Some(TokenResponse::Delete));
+        assert_eq!(id.to_response().await, Some(TokenResponse::Delete));
     }
 }

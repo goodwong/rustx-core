@@ -12,6 +12,7 @@ pub(crate) const NONCE_LENGTH: usize = 12;
 pub(super) const TOKEN_LIFE_HOURS: i64 = 1;
 pub(super) const REFRESH_TOKEN_LIFE_DAYS: i64 = 30;
 
+#[derive(Copy, Clone)]
 pub(crate) struct Token {
     pub nonce: [u8; NONCE_LENGTH],
     pub user_id: i64,
