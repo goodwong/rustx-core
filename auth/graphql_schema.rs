@@ -81,8 +81,13 @@ impl MutationRoot {
     }
 
     #[doc = "注销登陆态"]
-    async fn logout() -> bool {
-        todo!()
+    async fn logout(context: &Context) -> FieldResult<bool> {
+        context
+            .identity
+            .logout()
+            .await
+            .map(|_| true)
+            .map_err(|_| "未登陆".into())
     }
 }
 
