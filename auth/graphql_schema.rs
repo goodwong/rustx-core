@@ -61,7 +61,7 @@ impl QueryRoot {
             .identity
             .user()
             .await
-            .map(User::from)
+            .map(From::from)
             .ok_or_else(|| "未登录".into())
     }
 }
@@ -72,22 +72,14 @@ impl MutationRoot {
     #[doc = "登陆"]
     async fn login(context: &Context) -> FieldResult<bool> {
         let user = find_user(1, context.pool.get()?).await?;
-        context
-            .identity
-            .login(user)
-            .await
-            .map(|_| true)
-            .map_err(|_| "无法登陆".into())
+        context.identity.login(user).await?;
+        Ok(true)
     }
 
     #[doc = "注销登陆态"]
     async fn logout(context: &Context) -> FieldResult<bool> {
-        context
-            .identity
-            .logout()
-            .await
-            .map(|_| true)
-            .map_err(|_| "未登陆".into())
+        context.identity.logout().await?;
+        Ok(true)
     }
 }
 
