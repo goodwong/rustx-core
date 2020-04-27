@@ -1,11 +1,12 @@
 #![allow(dead_code)]
 
-pub(self) mod error;
+mod context;
+mod error;
 pub mod graphql_schema;
 pub mod models;
 pub mod repository;
 pub mod service;
-pub(self) mod token;
+mod token;
 
 // 测试
 #[cfg(test)]

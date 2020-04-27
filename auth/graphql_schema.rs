@@ -1,22 +1,9 @@
+pub use super::context::Context;
 use super::models::User as UserModel;
 use super::repository::find_user;
-use crate::auth::service::Identity;
-use crate::db_connection::PgPool;
 
 use juniper;
 use juniper::FieldResult;
-use std::sync::Arc;
-
-pub struct Context {
-    pub pool: PgPool,
-    pub identity: Arc<Identity>,
-}
-impl juniper::Context for Context {}
-impl Context {
-    pub fn new(pool: PgPool, identity: Arc<Identity>) -> Self {
-        Self { pool, identity }
-    }
-}
 
 #[derive(juniper::GraphQLObject)]
 #[graphql(description = "用户类型")]
