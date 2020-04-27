@@ -27,7 +27,7 @@ async fn get_user_info() {
 async fn auto_refresh_access_token() {
     let dd = Dingtalk::new(Config::from_env());
     {
-        let mut access_token = dd.access_token.lock().unwrap();
+        let mut access_token = dd.access_token.write().await;
         *access_token = AccessToken::new("asdfasdfkajslkdfjals".to_string());
     }
 

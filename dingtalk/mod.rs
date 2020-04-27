@@ -10,8 +10,8 @@ use access_token::AccessToken;
 use http::Method;
 use reqwest;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::sync::Mutex; // todo 改用tokio::sync::RwLock
 use thiserror::Error as ThisError;
+use tokio::sync::RwLock;
 
 // dingtalk 配置
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -51,13 +51,13 @@ impl Config {
 // dingtalk 结构
 pub struct Dingtalk {
     pub(crate) cfg: Config,
-    pub(crate) access_token: Mutex<AccessToken>,
+    pub(crate) access_token: RwLock<AccessToken>,
 }
 impl Dingtalk {
     pub fn new(cfg: Config) -> Dingtalk {
         Dingtalk {
             cfg,
-            access_token: Mutex::new(AccessToken::default()),
+            access_token: RwLock::new(AccessToken::default()),
         }
     }
 
@@ -133,7 +133,7 @@ impl Dingtalk {
             // 除了无效token和系统繁忙需要进入重试，其它情况无论成功与否都退出循环
             match &result {
                 Err(DingtalkError::InvalidAccessToken) => {
-                    self.reset_access_token(access_token);
+                    self.reset_access_token(access_token).await;
                 }
                 Err(DingtalkError::SystemBusy) => {
                     continue;

@@ -3,7 +3,7 @@ use http::Method;
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct AccessToken {
     token: String,
     expired_at: Instant,
@@ -40,17 +40,24 @@ impl Dingtalk {
         Ok(result.access_token)
     }
 
+    async fn get_token(&self) -> AccessToken {
+        self.access_token.read().await.clone()
+    }
+    async fn set_token(&self, token: AccessToken) {
+        *self.access_token.write().await = token
+    }
+
     pub async fn access_token(&self) -> Result<String, DingtalkError> {
-        let mut access_token = self.access_token.lock().unwrap();
+        let access_token = self.get_token().await;
         if !access_token.valid() {
             let new_token = self.fetch_access_token().await?;
-            *access_token = AccessToken::new(new_token);
+            self.set_token(AccessToken::new(new_token)).await;
         }
         Ok(access_token.token.to_string())
     }
 
-    pub fn reset_access_token(&self, old_token: String) {
-        let mut access_token = self.access_token.lock().unwrap();
+    pub async fn reset_access_token(&self, old_token: String) {
+        let mut access_token = self.access_token.write().await;
         // 再次判断，避免排队reset
         // 如token已经变化，
         // 说明中间(因为锁，可能需要等待很久)有其他进程reset或fetch过这个token了，
