@@ -62,7 +62,6 @@ impl Dingtalk {
     }
 
     pub(super) async fn raw_request<T, O>(
-        &self,
         method: Method,
         url: String,
         payload: &T,
@@ -123,7 +122,7 @@ impl Dingtalk {
                 "".to_string()
             };
             let url = url.clone().replace("ACCESS_TOKEN", &access_token);
-            let result = self.raw_request(method.clone(), url.clone(), payload).await;
+            let result = Self::raw_request(method.clone(), url.clone(), payload).await;
 
             retry += 1;
             if retry > 2 {

@@ -36,7 +36,7 @@ impl Dingtalk {
         let url = url
             .replace("KEY", &self.cfg.app_key)
             .replace("SECRET", &self.cfg.app_secret);
-        let result: Response = self.raw_request(Method::GET, url, &()).await?;
+        let result: Response = Self::raw_request(Method::GET, url, &()).await?;
         Ok(result.access_token)
     }
 
