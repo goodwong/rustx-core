@@ -1,7 +1,7 @@
+use chrono::{DateTime, Duration, Utc};
 use http::Method;
 use reqwest;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::time::{Duration, Instant};
 use thiserror::Error as ThisError;
 use tokio::sync::RwLock;
 
@@ -45,12 +45,11 @@ impl Client {
         let token = self.token.get_token().await;
         if !token.valid() {
             let new_token = self.fetch_access_token().await?;
-            let expires_in = Duration::from_secs(new_token.expires_in.unwrap_or(7200));
-            self.token
-                .set_token(AccessTokenEntiry::new(new_token.access_token, expires_in))
-                .await;
+            self.token.set_token(new_token.clone()).await;
+            Ok(new_token.access_token)
+        } else {
+            Ok(token.access_token)
         }
-        Ok(token.access_token)
     }
 
     pub async fn reset_access_token(&self, old_token: String) {
@@ -77,6 +76,8 @@ impl Client {
         T: Serialize + ?Sized,
         O: DeserializeOwned,
     {
+        info!("\t=> raw_request: {} {}", method, url);
+
         // request...
         let client = reqwest::Client::new();
         let builder = match method {
@@ -95,12 +96,20 @@ impl Client {
     }
 
     fn check_error(response: &str) -> ClientResult<()> {
+        // api错误结构
+        #[derive(Serialize, Deserialize, Debug)]
+        struct ApiErrorResponse {
+            errcode: Option<i32>,
+            errmsg: Option<String>,
+        }
+
         let error: ApiErrorResponse = serde_json::from_str(response)?;
         match error.errcode {
-            0 => Ok(()),
-            -1 => Err(ClientError::SystemBusy),
-            40001 | 40014 | 41001 => Err(ClientError::InvalidAccessToken),
-            _ => Err(ClientError::Other(error.errmsg)),
+            None => Ok(()),
+            Some(0) => Ok(()),
+            Some(-1) => Err(ClientError::SystemBusy),
+            Some(40001) | Some(40014) | Some(41001) => Err(ClientError::InvalidAccessToken),
+            Some(_) => Err(ClientError::Other(format!("{:?}", error))),
         }?;
         Ok(())
     }
@@ -130,30 +139,34 @@ impl Client {
 
             // 除了无效token和系统繁忙需要进入重试，其它情况无论成功与否都退出循环
             match &result {
-                Err(ClientError::InvalidAccessToken) => {
-                    self.reset_access_token(token_str).await;
-                }
-                Err(ClientError::SystemBusy) => {
-                    continue;
-                }
-                Ok(_) => break result,
+                Err(ClientError::InvalidAccessToken) => println!("Invalid Token! retry({})", retry),
+                Err(ClientError::SystemBusy) => println!("SystemBusy! retry({})", retry),
+                Err(_) => (),
+                Ok(_) => (),
+            }
+            match &result {
+                Err(ClientError::InvalidAccessToken) => self.reset_access_token(token_str).await,
+                Err(ClientError::SystemBusy) => continue,
                 Err(_) => break result,
+                Ok(_) => break result,
             }
         }
     }
 
-    async fn fetch_access_token(&self) -> ClientResult<ApiTokenResponse> {
+    async fn fetch_access_token(&self) -> ClientResult<AccessTokenEntiry> {
+        #[derive(Serialize, Deserialize, Debug)]
+        struct ApiTokenResponse {
+            access_token: String,
+            expires_in: Option<i64>, // 钉钉没有这个字段
+        }
+
         let result: ApiTokenResponse =
             Self::raw_request(Method::GET, &self.cfg.token_url, &()).await?;
-        Ok(result)
-    }
-}
 
-// api错误结构
-#[derive(Serialize, Deserialize, Debug)]
-struct ApiErrorResponse {
-    errcode: i32,
-    errmsg: String,
+        let expires_in = Duration::seconds(result.expires_in.unwrap_or(7200));
+        let token = AccessTokenEntiry::new(result.access_token, expires_in);
+        Ok(token)
+    }
 }
 
 // 错误类型
@@ -190,13 +203,13 @@ impl AccessToken {
 #[derive(Debug, Clone)]
 struct AccessTokenEntiry {
     access_token: String,
-    expired_at: Instant,
+    expired_at: DateTime<Utc>,
 }
 impl Default for AccessTokenEntiry {
     fn default() -> AccessTokenEntiry {
         AccessTokenEntiry {
             access_token: "".to_string(),
-            expired_at: Instant::now() - Duration::from_secs(10),
+            expired_at: Utc::now() - Duration::seconds(10),
         }
     }
 }
@@ -204,17 +217,12 @@ impl AccessTokenEntiry {
     pub(crate) fn new(access_token: String, ttl: Duration) -> AccessTokenEntiry {
         AccessTokenEntiry {
             access_token,
-            expired_at: Instant::now() + ttl,
+            expired_at: Utc::now() + ttl,
         }
     }
     pub(crate) fn valid(&self) -> bool {
-        self.expired_at > Instant::now() + Duration::from_secs(10)
+        self.expired_at > Utc::now() + Duration::seconds(10)
     }
-}
-#[derive(Serialize, Deserialize, Debug)]
-struct ApiTokenResponse {
-    access_token: String,
-    expires_in: Option<u64>, // 钉钉没有这个字段
 }
 
 #[cfg(test)]

@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 
 // dingtalk 配置
 #[derive(Serialize, Deserialize, Debug, Default)]
-#[serde(rename_all = "camelCase")]
 pub struct Config {
     pub corp_id: String,
     pub agent_id: u64,
@@ -125,18 +124,18 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn get_user_info() {
-        let dd = Dingtalk::new(Config::from_env());
-
-        let user_info = dd.user_info("manager7140".to_string()).await.unwrap();
-        println!("user_info: {:#?}", user_info);
-    }
-
-    #[tokio::test]
     async fn auto_refresh_access_token() {
         let dd = Dingtalk::new(Config::from_env());
         dd.access_token().await.unwrap();
         dd.set_invalid_access_token().await;
         let _ = dd.user_info("manager7140".to_string()).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn get_user_info() {
+        let dd = Dingtalk::new(Config::from_env());
+
+        let user_info = dd.user_info("manager7140".to_string()).await.unwrap();
+        println!("user_info: {:#?}", user_info);
     }
 }
