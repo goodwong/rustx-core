@@ -60,9 +60,26 @@ impl Miniapp {
             errcode: Option<i32>,
             errmsg: Option<String>,
         }
-        let _: ApiErrorResponse = self.client.post(url, &payload).await?;
+        self.client
+            .post::<_, ApiErrorResponse>(url, &payload)
+            .await?;
         Ok(())
     }
+    pub async fn code_to_session(&self, code: &str) -> ClientResult<Code2SessionResponse> {
+        let url = "https://api.weixin.qq.com/sns/jscode2session?appid=APPID&secret=SECRET&js_code=JSCODE&grant_type=authorization_code";
+        let url = url
+            .replace("APPID", &self.cfg.appid)
+            .replace("SECRET", &self.cfg.secret)
+            .replace("JSCODE", code);
+        self.client.get::<Code2SessionResponse>(&url).await
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Code2SessionResponse {
+    openid: String,          //	用户唯一标识
+    session_key: String,     //	会话密钥
+    unionid: Option<String>, //	用户在开放平台的唯一标识符，在满足 UnionID 下发条件的情况下会返回，详见 UnionID 机制说明。
 }
 
 #[cfg(test)]
@@ -101,5 +118,20 @@ mod tests {
         let app = Miniapp::new(Config::from_env());
 
         let _ = app.msg_sec_check("法轮功").await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn code_to_session() -> TestResult<()> {
+        // 为了在testing下看到logging
+        use env_logger;
+        env_logger::init();
+
+        use std::env;
+        let code = env::var("JS_CODE").expect("value `JS_CODE` not set");
+        let app = Miniapp::new(Config::from_env());
+        let session = app.code_to_session(&code).await?;
+        println!("session: {:?}", session);
+
+        Ok(())
     }
 }
