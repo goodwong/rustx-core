@@ -76,8 +76,6 @@ impl Client {
         T: Serialize + ?Sized,
         O: DeserializeOwned,
     {
-        info!("\t=> raw_request: {} {}", method, url);
-
         // request...
         let client = reqwest::Client::new();
         let builder = match method {
@@ -85,14 +83,18 @@ impl Client {
             Method::GET => client.get(url),
             _ => panic!("Invalid Mehtod: {}", method),
         };
+        debug!("\t=> raw_request() send: {} {}", method, url);
         let response = builder.json(payload).send().await?.text().await?;
-        debug!("raw_request() response: {}", response);
+        debug!("\t<= raw_request() response: {}", response);
 
         // check error...
         Self::check_error(&response)?;
 
         // deserialize...
-        serde_json::from_str(&response).map_err(Into::into)
+        serde_json::from_str(&response).map_err(|e| {
+            warn!("serde_json解析错误：{:?}，response: {}", e, &response);
+            e.into()
+        })
     }
 
     fn check_error(response: &str) -> ClientResult<()> {
@@ -139,9 +141,9 @@ impl Client {
 
             // 除了无效token和系统繁忙需要进入重试，其它情况无论成功与否都退出循环
             match &result {
-                Err(ClientError::InvalidAccessToken) => println!("Invalid Token! retry({})", retry),
-                Err(ClientError::SystemBusy) => println!("SystemBusy! retry({})", retry),
-                Err(_) => (),
+                Err(ClientError::InvalidAccessToken) => info!("Invalid Token! retry({})", retry),
+                Err(ClientError::SystemBusy) => info!("SystemBusy! retry({})", retry),
+                Err(err) => warn!("{}", err),
                 Ok(_) => (),
             }
             match &result {
@@ -163,7 +165,7 @@ impl Client {
         let result: ApiTokenResponse =
             Self::raw_request(Method::GET, &self.cfg.token_url, &()).await?;
 
-        let expires_in = Duration::seconds(result.expires_in.unwrap_or(7200));
+        let expires_in = Duration::seconds(result.expires_in.unwrap_or(7200)); // todo 钉钉固定7200，其它平台须注意此处
         let token = AccessTokenEntiry::new(result.access_token, expires_in);
         Ok(token)
     }
