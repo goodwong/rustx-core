@@ -267,6 +267,7 @@ mod tests {
     use chrono::{Duration, Utc};
     use dotenv::dotenv;
     use std::env;
+    type TestResult<O> = Result<O, Box<dyn std::error::Error + Send + Sync>>;
 
     fn db_pool() -> PgPool {
         dotenv().ok();
@@ -284,30 +285,30 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_login() {
+    async fn test_login() -> TestResult<()> {
         let pool = db_pool();
         let cipher_key = "Q+mvRWovv4NHANIuevkXtAmC3r2wp8bjyrKCPTgm7m0=";
         let auth = AuthService::new(pool.clone(), cipher_key);
         // 构建一个测试user
         let user = {
-            let conn = pool.get().unwrap();
+            let conn = pool.get()?;
             let _insert = InsertUser {
                 username: "test".to_string() + &Utc::now().format("%s").to_string(),
                 name: "test".to_string(),
                 avatar: "test".to_string(),
             };
-            create_user(_insert, conn).await.unwrap()
+            create_user(_insert, conn).await?
         };
 
         // 测试一：无效token
-        let id = auth.get_identity("an invalid token").await.unwrap();
+        let id = auth.get_identity("an invalid token").await?;
         assert_eq!(id.is_login().await, false);
         assert_eq!(id.user_id().await, None);
         assert_eq!(id.user().await, None);
         assert_eq!(id.to_response().await, Some(TokenResponse::Delete));
 
         // 测试三：登陆
-        id.login(user.clone()).await.unwrap();
+        id.login(user.clone()).await?;
         assert_eq!(id.is_login().await, true);
         assert_eq!(user.id, id.user_id().await.unwrap());
         assert_eq!(user, id.user().await.unwrap());
@@ -322,7 +323,7 @@ mod tests {
         };
 
         // 测试四：登出
-        id.logout().await.unwrap();
+        id.logout().await?;
         assert_eq!(id.is_login().await, false);
         assert_eq!(id.user_id().await, None);
         assert_eq!(id.user().await, None);
@@ -331,7 +332,7 @@ mod tests {
         // 测试五：使用登出的token（主动失效的token）
         // todo 登出后token应该失效
         /*
-        let id = auth.get_identity(&_token_str).await.unwrap();
+        let id = auth.get_identity(&_token_str).await?;
         assert_eq!(id.is_login().await, false);
         assert_eq!(id.user_id().await, None);
         assert_eq!(id.user().await, None);
@@ -348,11 +349,10 @@ mod tests {
                 refresh_token_id: Default::default(),
                 issued_at: Utc::now().timestamp(),
             }
-            .to_string(&auth.config.cipher_key)
-            .unwrap();
+            .to_string(&auth.config.cipher_key)?;
             token_str
         };
-        let id = auth.get_identity(&token_str).await.unwrap();
+        let id = auth.get_identity(&token_str).await?;
         assert_eq!(id.is_login().await, true);
         assert_eq!(user.id, id.user_id().await.unwrap());
         assert_eq!(user, id.user().await.unwrap());
@@ -367,9 +367,7 @@ mod tests {
                 device: Default::default(),
                 hash,
             };
-            let refresh_token = create_refresh_token(insert, pool.get().unwrap())
-                .await
-                .unwrap();
+            let refresh_token = create_refresh_token(insert, pool.get()?).await?;
 
             // pack token string
             // !故意提前，让token过期，为了让数据库验证token
@@ -380,10 +378,10 @@ mod tests {
                 refresh_token_id: refresh_token.id as i64,
                 issued_at: fake_issued_at.timestamp(),
             };
-            let (token_str, _) = token.to_string(&auth.config.cipher_key).unwrap();
+            let (token_str, _) = token.to_string(&auth.config.cipher_key)?;
             token_str
         };
-        let id = auth.get_identity(&token_str).await.unwrap();
+        let id = auth.get_identity(&token_str).await?;
         assert_eq!(id.is_login().await, true);
         assert_eq!(user.id, id.user_id().await.unwrap());
         assert_eq!(user, id.user().await.unwrap());
@@ -399,10 +397,12 @@ mod tests {
 
         // 测试七：再次使用renew前的token
         // 旧的token应该失效
-        let id = auth.get_identity(&token_str).await.unwrap();
+        let id = auth.get_identity(&token_str).await?;
         assert_eq!(id.is_login().await, false);
         assert_eq!(id.user_id().await, None);
         assert_eq!(id.user().await, None);
         assert_eq!(id.to_response().await, Some(TokenResponse::Delete));
+
+        Ok(())
     }
 }

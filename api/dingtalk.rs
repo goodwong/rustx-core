@@ -42,8 +42,8 @@ pub struct Dingtalk {
 }
 impl Dingtalk {
     pub fn new(cfg: Config) -> Dingtalk {
-        let url = "https://oapi.dingtalk.com/gettoken?appkey=KEY&appsecret=SECRET";
-        let token_url = url
+        let token_url = "https://oapi.dingtalk.com/gettoken?appkey=KEY&appsecret=SECRET";
+        let token_url = token_url
             .replace("KEY", &cfg.app_key)
             .replace("SECRET", &cfg.app_secret);
         let client = Client::new(ClientConfig { token_url });
@@ -108,6 +108,7 @@ impl Dingtalk {
 #[cfg(test)]
 mod tests {
     use super::{Config, Dingtalk};
+    type TestResult<O> = Result<O, Box<dyn std::error::Error + Send + Sync>>;
 
     #[test]
     fn read_config_from_env() {
@@ -116,26 +117,29 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn get_access_token() {
+    async fn get_access_token() -> TestResult<()> {
         let cfg = Config::from_env();
         let dd = Dingtalk::new(cfg);
 
-        println!("access_token: {}", dd.access_token().await.unwrap());
+        println!("access_token: {}", dd.access_token().await?);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn auto_refresh_access_token() {
+    async fn auto_refresh_access_token() -> TestResult<()> {
         let dd = Dingtalk::new(Config::from_env());
-        dd.access_token().await.unwrap();
+        dd.access_token().await?;
         dd.set_invalid_access_token().await;
-        let _ = dd.user_info("manager7140".to_string()).await.unwrap();
+        let _ = dd.user_info("manager7140".to_string()).await?;
+        Ok(())
     }
 
     #[tokio::test]
-    async fn get_user_info() {
+    async fn get_user_info() -> TestResult<()> {
         let dd = Dingtalk::new(Config::from_env());
 
-        let user_info = dd.user_info("manager7140".to_string()).await.unwrap();
+        let user_info = dd.user_info("manager7140".to_string()).await?;
         println!("user_info: {:#?}", user_info);
+        Ok(())
     }
 }

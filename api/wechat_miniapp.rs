@@ -30,8 +30,8 @@ pub struct Miniapp {
 }
 impl Miniapp {
     pub fn new(cfg: Config) -> Miniapp {
-        let url = "https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=APPID&secret=APPSECRET";
-        let token_url = url
+        let token_url = "https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=APPID&secret=APPSECRET";
+        let token_url = token_url
             .replace("APPID", &cfg.appid)
             .replace("APPSECRET", &cfg.secret);
         let client = Client::new(ClientConfig { token_url });
@@ -50,7 +50,7 @@ impl Miniapp {
 }
 
 impl Miniapp {
-    pub async fn msg_sec_check(&self, content: String) -> ClientResult<()> {
+    pub async fn msg_sec_check(&self, content: &str) -> ClientResult<()> {
         let url = "https://api.weixin.qq.com/wxa/msg_sec_check?access_token=ACCESS_TOKEN";
         let mut payload = HashMap::new();
         payload.insert("content", content);
@@ -68,6 +68,7 @@ impl Miniapp {
 #[cfg(test)]
 mod tests {
     use super::{Config, Miniapp};
+    type TestResult<O> = Result<O, Box<dyn std::error::Error + Send + Sync>>;
 
     #[test]
     fn read_config_from_env() {
@@ -76,20 +77,22 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn get_access_token() {
+    async fn get_access_token() -> TestResult<()> {
         let cfg = Config::from_env();
         let app = Miniapp::new(cfg);
 
-        println!("access_token: {}", app.access_token().await.unwrap());
+        println!("access_token: {}", app.access_token().await?);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn auto_refresh_access_token() {
+    async fn auto_refresh_access_token() -> TestResult<()> {
         let app = Miniapp::new(Config::from_env());
-        app.access_token().await.unwrap();
+        app.access_token().await?;
         app.set_invalid_access_token().await;
 
-        let _ = app.msg_sec_check("平安顺利".to_string()).await.unwrap();
+        let _ = app.msg_sec_check("平安顺利").await?;
+        Ok(())
     }
 
     #[tokio::test]
@@ -97,6 +100,6 @@ mod tests {
     async fn msg_sec_check() {
         let app = Miniapp::new(Config::from_env());
 
-        let _ = app.msg_sec_check("法轮功".to_string()).await.unwrap();
+        let _ = app.msg_sec_check("法轮功").await.unwrap();
     }
 }
