@@ -1,6 +1,8 @@
 use super::error::AuthResult;
+use super::models::UserToken;
 use aead::{generic_array::GenericArray, Aead, NewAead};
 use aes_gcm_siv::Aes256GcmSiv;
+use bcrypt;
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use rand::Rng;
 use std::convert::TryInto;
@@ -92,6 +94,13 @@ impl Token {
         // 因此这里可以安全的unwrap()
         let hash = bcrypt::hash(nonce, bcrypt::DEFAULT_COST).unwrap();
         (nonce, hash)
+    }
+
+    pub fn verify(&self, refresh_token: &UserToken) -> bool {
+        let is_expired = refresh_token.deleted_at.is_some()
+            || Utc::now() > refresh_token.issued_at + Duration::hours(REFRESH_TOKEN_LIFE_DAYS);
+
+        !is_expired && bcrypt::verify(self.nonce, &refresh_token.hash).unwrap_or(false)
     }
 }
 

@@ -176,7 +176,7 @@ impl Identity {
                     Err(NotFound) => Ok(Self::with_invalid_token(cfg)),
                     Err(e) => Err(e.into()),
                     // 校验
-                    Ok(refresh_token) => match refresh_token.is_valid(&token.nonce) {
+                    Ok(refresh_token) => match token.verify(&refresh_token) {
                         true => Self::with_renew(token, cfg).await,
                         false => Ok(Self::with_invalid_token(cfg)),
                     },

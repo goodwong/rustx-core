@@ -1,7 +1,5 @@
-use super::token::{NONCE_LENGTH, REFRESH_TOKEN_LIFE_DAYS};
 use crate::diesel_schema::{user_tokens, users};
-use bcrypt;
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 
 // 用户
 #[derive(Identifiable, Queryable, Clone, PartialEq, Debug)]
@@ -26,13 +24,4 @@ pub struct UserToken {
     pub created_at: DateTime<Utc>,
     pub issued_at: DateTime<Utc>,
     pub deleted_at: Option<DateTime<Utc>>,
-}
-impl UserToken {
-    pub fn is_valid(&self, nonce: &[u8; NONCE_LENGTH]) -> bool {
-        !self.is_expired() && bcrypt::verify(nonce, &self.hash).unwrap_or(false)
-    }
-    fn is_expired(&self) -> bool {
-        self.deleted_at.is_none()
-            && self.issued_at + Duration::hours(REFRESH_TOKEN_LIFE_DAYS) < Utc::now()
-    }
 }
