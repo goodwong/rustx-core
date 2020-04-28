@@ -141,8 +141,8 @@ impl Client {
 
             // 除了无效token和系统繁忙需要进入重试，其它情况无论成功与否都退出循环
             match &result {
-                Err(ClientError::InvalidAccessToken) => info!("Invalid Token! retry({})", retry),
-                Err(ClientError::SystemBusy) => info!("SystemBusy! retry({})", retry),
+                Err(ClientError::InvalidAccessToken) => warn!("Invalid Token! retry({})", retry),
+                Err(ClientError::SystemBusy) => warn!("SystemBusy! retry({})", retry),
                 Err(err) => warn!("{}", err),
                 Ok(_) => (),
             }
@@ -164,8 +164,9 @@ impl Client {
 
         let result: ApiTokenResponse =
             Self::raw_request(Method::GET, &self.cfg.token_url, &()).await?;
-
         let expires_in = Duration::seconds(result.expires_in.unwrap_or(7200)); // todo 钉钉固定7200，其它平台须注意此处
+        info!("fetch_access_token() -> {}", &result.access_token);
+
         let token = AccessTokenEntiry::new(result.access_token, expires_in);
         Ok(token)
     }
