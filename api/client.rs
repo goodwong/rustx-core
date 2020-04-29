@@ -110,7 +110,7 @@ impl Client {
             None => Ok(()),
             Some(0) => Ok(()),
             Some(-1) => Err(ClientError::SystemBusy),
-            Some(40001) | Some(40014) | Some(41001) => Err(ClientError::InvalidAccessToken),
+            Some(40001) | Some(40014) | Some(41001) => Err(ClientError::InvalidToken),
             Some(_) => Err(ClientError::Other(format!("{:?}", error))),
         }?;
         Ok(())
@@ -131,8 +131,10 @@ impl Client {
             } else {
                 Default::default()
             };
-            let url = url.to_owned().replace("ACCESS_TOKEN", &token_str);
-            let result = Self::raw_request(method.clone(), &url, payload).await;
+            let result = {
+                let url = url.replace("ACCESS_TOKEN", &token_str);
+                Self::raw_request(method.clone(), &url, payload).await
+            };
 
             retry += 1;
             if retry > 2 {
@@ -141,13 +143,13 @@ impl Client {
 
             // 除了无效token和系统繁忙需要进入重试，其它情况无论成功与否都退出循环
             match &result {
-                Err(ClientError::InvalidAccessToken) => warn!("Invalid Token! retry({})", retry),
-                Err(ClientError::SystemBusy) => warn!("SystemBusy! retry({})", retry),
-                Err(err) => warn!("{}", err),
+                Err(ClientError::InvalidToken) => warn!("InvalidToken! retry({}) <-{}", retry, url),
+                Err(ClientError::SystemBusy) => warn!("SystemBusy! retry({}) <-{}", retry, url),
+                Err(err) => warn!("ApiError: {} <-{}", err, url),
                 Ok(_) => (),
             }
             match &result {
-                Err(ClientError::InvalidAccessToken) => self.reset_access_token(token_str).await,
+                Err(ClientError::InvalidToken) => self.reset_access_token(token_str).await,
                 Err(ClientError::SystemBusy) => continue,
                 Err(_) => break result,
                 Ok(_) => break result,
@@ -179,8 +181,8 @@ pub enum ClientError {
     Reqwest(#[from] reqwest::Error),
     #[error(transparent)]
     Serde(#[from] serde_json::error::Error),
-    #[error("Client Error InvalidAccessToken")]
-    InvalidAccessToken,
+    #[error("Client Error InvalidToken")]
+    InvalidToken,
     #[error("Client Error SystemBusy")]
     SystemBusy,
     #[error("Client Error:")]
