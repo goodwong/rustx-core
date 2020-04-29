@@ -131,7 +131,7 @@ impl Client {
             } else {
                 Default::default()
             };
-            let url = url.clone().replace("ACCESS_TOKEN", &token_str);
+            let url = url.to_owned().replace("ACCESS_TOKEN", &token_str);
             let result = Self::raw_request(method.clone(), &url, payload).await;
 
             retry += 1;

@@ -1,5 +1,11 @@
 use super::client::{Client, ClientResult, Config as ClientConfig};
+//use anyhow::Result as AnyhowResult;
+use super::aes_cbc_128;
+use base64;
 use serde::{Deserialize, Serialize};
+use std::str;
+
+type AnyhowResult<O> = Result<O, Box<dyn std::error::Error + Send + Sync>>;
 
 // miniapp 配置
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -76,6 +82,22 @@ impl Miniapp {
             .replace("JSCODE", code);
         self.client.get::<Code2SessionResponse>(&url).await
     }
+
+    pub fn get_phone_number(
+        session_key: &str,
+        iv: &str,
+        data: &str,
+    ) -> AnyhowResult<PhoneNumberResult> {
+        let session_key = base64::decode(session_key)?;
+        let iv = base64::decode(iv)?;
+        let data = base64::decode(data)?;
+
+        let decrypted_data = aes_cbc_128::decrypt(&data, &session_key, &iv)
+            .map_err(|e| format!("解密失败：{:?}", e))?;
+
+        let data = str::from_utf8(&decrypted_data)?;
+        serde_json::from_str::<PhoneNumberResult>(data).map_err(Into::into)
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -83,6 +105,13 @@ pub struct Code2SessionResponse {
     openid: String,          //	用户唯一标识
     session_key: String,     //	会话密钥
     unionid: Option<String>, //	用户在开放平台的唯一标识符，在满足 UnionID 下发条件的情况下会返回，详见 UnionID 机制说明。
+}
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct PhoneNumberResult {
+    phone_number: String,      // 用户绑定的手机号（国外手机号会有区号）
+    pure_phone_number: String, // 没有区号的手机号
+    country_code: String,      //
 }
 
 #[cfg(test)]
@@ -136,5 +165,14 @@ mod tests {
         println!("session: {:?}", session);
 
         Ok(())
+    }
+
+    #[test]
+    fn get_phone_number() {
+        let session_key = "V76yDG9WkjT/ZRBOHaaw/Q==";
+        let iv = "C5JfTNchCZl+Np3FzpNGZg==";
+        let data = "QfvgdpP7cs7G/6uW135ygEw+C1FP5BQcoKnl8O+bSBwoeo0iNV62jF/5Y2+zrLrUxjppgx2+s+GlM8F6WURuNYGpD1uZpygOKMeSY6bo41QOlkyAa+H8DtNGp2fMnBgal/kP0ILvgfqnDuc5zUE3kjV1HFQNkQgMhIA4HsGm4r+d3C4sSebiAEvMxWs/f07ivPeaeBKPkFf/+PMpcNl0/A==";
+        let result = Miniapp::get_phone_number(session_key, iv, data).unwrap();
+        println!("get_phone_number(): {:?}", result);
     }
 }
