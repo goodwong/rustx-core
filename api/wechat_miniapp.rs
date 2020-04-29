@@ -1,6 +1,5 @@
 use super::client::{Client, ClientResult, Config as ClientConfig};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 // miniapp 配置
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -52,14 +51,18 @@ impl Miniapp {
 impl Miniapp {
     pub async fn msg_sec_check(&self, content: &str) -> ClientResult<()> {
         let url = "https://api.weixin.qq.com/wxa/msg_sec_check?access_token=ACCESS_TOKEN";
-        let mut payload = HashMap::new();
-        payload.insert("content", content);
 
-        #[derive(Serialize, Deserialize, Debug)]
+        #[derive(Serialize)]
+        struct MsgSecCheckRequest<'a> {
+            content: &'a str,
+        }
+        #[derive(Deserialize)]
         struct ApiErrorResponse {
             errcode: Option<i32>,
             errmsg: Option<String>,
         }
+
+        let payload = MsgSecCheckRequest { content };
         self.client
             .post::<_, ApiErrorResponse>(url, &payload)
             .await?;
@@ -85,6 +88,7 @@ pub struct Code2SessionResponse {
 #[cfg(test)]
 mod tests {
     use super::{Config, Miniapp};
+    use std::env;
     type TestResult<O> = Result<O, Box<dyn std::error::Error + Send + Sync>>;
 
     #[test]
@@ -126,8 +130,7 @@ mod tests {
         use env_logger;
         env_logger::init();
 
-        use std::env;
-        let code = env::var("JS_CODE").expect("value `JS_CODE` not set");
+        let code = env::var("JS_CODE").expect("code_to_session `JS_CODE` not set");
         let app = Miniapp::new(Config::from_env());
         let session = app.code_to_session(&code).await?;
         println!("session: {:?}", session);
