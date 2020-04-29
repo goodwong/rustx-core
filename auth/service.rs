@@ -176,10 +176,13 @@ impl Identity {
                     Err(NotFound) => Ok(Self::with_invalid_token(cfg)),
                     Err(e) => Err(e.into()),
                     // 校验
-                    Ok(refresh_token) => match token.verify(&refresh_token) {
-                        true => Self::with_renew(token, cfg).await,
-                        false => Ok(Self::with_invalid_token(cfg)),
-                    },
+                    Ok(refresh_token) => {
+                        if token.verify(&refresh_token) {
+                            Self::with_renew(token, cfg).await
+                        } else {
+                            Ok(Self::with_invalid_token(cfg))
+                        }
+                    }
                 }
             }
         }
