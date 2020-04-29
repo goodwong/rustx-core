@@ -116,3 +116,15 @@ match identity.to_response() {
     None => _, // 未登录、已登录但未过期
 }
 ```
+
+
+登陆流程
+------
+
+小程序登陆：
+1. code2session()换取openid
+2. openid在`wechat_miniprogram_users`查找，如果找到，登陆 `LoginResult::Success`
+3. 如果没找到，暂存openid在session，返回 `LoginResult::NeedPhoneNumber`
+4. 待前端获取到用户的getPhoneNumber解密后，
+5. 用phone_number直接在users查找用户，如果找到，注册wechat_miniprogram_users，绑定，登陆 `LoginResult::Success`
+6. 否则，拒绝登陆 `LoginResult::Failure`

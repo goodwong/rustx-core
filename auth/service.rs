@@ -280,7 +280,7 @@ mod tests {
 
     #[test]
     #[should_panic]
-    fn new_auth_service_invalid_cipher_key() {
+    fn invalid_cipher_key() {
         let pool = db_pool();
         // should be panicked here
         // because of invalid key length
@@ -288,7 +288,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_login() -> TestResult<()> {
+    async fn login() -> TestResult<()> {
         let pool = db_pool();
         let cipher_key = "Q+mvRWovv4NHANIuevkXtAmC3r2wp8bjyrKCPTgm7m0=";
         let auth = AuthService::new(pool.clone(), cipher_key);

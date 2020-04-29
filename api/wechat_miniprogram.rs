@@ -7,7 +7,7 @@ use std::str;
 
 type AnyhowResult<O> = Result<O, Box<dyn std::error::Error + Send + Sync>>;
 
-// miniapp 配置
+// miniprogram 配置
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Config {
     pub appid: String,
@@ -28,20 +28,20 @@ impl Config {
     }
 }
 
-// miniapp 结构
-pub struct Miniapp {
+// miniprogram 结构
+pub struct Miniprogram {
     cfg: Config,
     client: Client,
 }
-impl Miniapp {
-    pub fn new(cfg: Config) -> Miniapp {
+impl Miniprogram {
+    pub fn new(cfg: Config) -> Miniprogram {
         let token_url = "https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=APPID&secret=APPSECRET";
         let token_url = token_url
             .replace("APPID", &cfg.appid)
             .replace("APPSECRET", &cfg.secret);
         let client = Client::new(ClientConfig { token_url });
 
-        Miniapp { cfg, client }
+        Miniprogram { cfg, client }
     }
 
     pub async fn access_token(&self) -> ClientResult<String> {
@@ -54,7 +54,7 @@ impl Miniapp {
     }
 }
 
-impl Miniapp {
+impl Miniprogram {
     pub async fn msg_sec_check(&self, content: &str) -> ClientResult<()> {
         let url = "https://api.weixin.qq.com/wxa/msg_sec_check?access_token=ACCESS_TOKEN";
 
@@ -116,7 +116,7 @@ pub struct PhoneNumberResult {
 
 #[cfg(test)]
 mod tests {
-    use super::{Config, Miniapp};
+    use super::{Config, Miniprogram};
     use std::env;
     type TestResult<O> = Result<O, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -129,7 +129,7 @@ mod tests {
     #[tokio::test]
     async fn get_access_token() -> TestResult<()> {
         let cfg = Config::from_env();
-        let app = Miniapp::new(cfg);
+        let app = Miniprogram::new(cfg);
 
         println!("access_token: {}", app.access_token().await?);
         Ok(())
@@ -137,7 +137,7 @@ mod tests {
 
     #[tokio::test]
     async fn auto_refresh_access_token() -> TestResult<()> {
-        let app = Miniapp::new(Config::from_env());
+        let app = Miniprogram::new(Config::from_env());
         app.access_token().await?;
         app.set_invalid_access_token().await;
 
@@ -148,7 +148,7 @@ mod tests {
     #[tokio::test]
     #[should_panic]
     async fn msg_sec_check() {
-        let app = Miniapp::new(Config::from_env());
+        let app = Miniprogram::new(Config::from_env());
 
         let _ = app.msg_sec_check("法轮功").await.unwrap();
     }
@@ -160,7 +160,7 @@ mod tests {
         env_logger::init();
 
         let code = env::var("JS_CODE").expect("code_to_session `JS_CODE` not set");
-        let app = Miniapp::new(Config::from_env());
+        let app = Miniprogram::new(Config::from_env());
         let session = app.code_to_session(&code).await?;
         println!("session: {:?}", session);
 
@@ -172,7 +172,7 @@ mod tests {
         let session_key = "V76yDG9WkjT/ZRBOHaaw/Q==";
         let iv = "C5JfTNchCZl+Np3FzpNGZg==";
         let data = "QfvgdpP7cs7G/6uW135ygEw+C1FP5BQcoKnl8O+bSBwoeo0iNV62jF/5Y2+zrLrUxjppgx2+s+GlM8F6WURuNYGpD1uZpygOKMeSY6bo41QOlkyAa+H8DtNGp2fMnBgal/kP0ILvgfqnDuc5zUE3kjV1HFQNkQgMhIA4HsGm4r+d3C4sSebiAEvMxWs/f07ivPeaeBKPkFf/+PMpcNl0/A==";
-        let result = Miniapp::get_phone_number(session_key, iv, data).unwrap();
+        let result = Miniprogram::get_phone_number(session_key, iv, data).unwrap();
         println!("get_phone_number(): {:?}", result);
     }
 }
