@@ -98,20 +98,44 @@ impl Miniprogram {
         let data = str::from_utf8(&decrypted_data)?;
         serde_json::from_str::<PhoneNumberResult>(data).map_err(Into::into)
     }
+
+    pub fn get_user_info(session_key: &str, iv: &str, data: &str) -> AnyhowResult<UserInfo> {
+        let session_key = base64::decode(session_key)?;
+        let iv = base64::decode(iv)?;
+        let data = base64::decode(data)?;
+
+        let decrypted_data = aes_cbc_128::decrypt(&data, &session_key, &iv)
+            .map_err(|e| format!("解密失败：{:?}", e))?;
+
+        let data = str::from_utf8(&decrypted_data)?;
+        serde_json::from_str::<UserInfo>(data).map_err(Into::into)
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Code2SessionResponse {
-    openid: String,          //	用户唯一标识
-    session_key: String,     //	会话密钥
-    unionid: Option<String>, //	用户在开放平台的唯一标识符，在满足 UnionID 下发条件的情况下会返回，详见 UnionID 机制说明。
+    pub openid: String,          //	用户唯一标识
+    pub session_key: String,     //	会话密钥
+    pub unionid: Option<String>, //	用户在开放平台的唯一标识符，在满足 UnionID 下发条件的情况下会返回，详见 UnionID 机制说明。
 }
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct PhoneNumberResult {
-    phone_number: String,      // 用户绑定的手机号（国外手机号会有区号）
-    pure_phone_number: String, // 没有区号的手机号
-    country_code: String,      //
+    pub phone_number: String,      // 用户绑定的手机号（国外手机号会有区号）
+    pub pure_phone_number: String, // 没有区号的手机号
+    pub country_code: String,      //
+}
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct UserInfo {
+    pub open_id: String,
+    pub nick_name: String,
+    pub gender: i16, // 0未知 1男性 2女性
+    pub language: String,
+    pub city: String,
+    pub province: String,
+    pub country: String,
+    pub avatar_url: String,
 }
 
 #[cfg(test)]
@@ -174,5 +198,14 @@ mod tests {
         let data = "QfvgdpP7cs7G/6uW135ygEw+C1FP5BQcoKnl8O+bSBwoeo0iNV62jF/5Y2+zrLrUxjppgx2+s+GlM8F6WURuNYGpD1uZpygOKMeSY6bo41QOlkyAa+H8DtNGp2fMnBgal/kP0ILvgfqnDuc5zUE3kjV1HFQNkQgMhIA4HsGm4r+d3C4sSebiAEvMxWs/f07ivPeaeBKPkFf/+PMpcNl0/A==";
         let result = Miniprogram::get_phone_number(session_key, iv, data).unwrap();
         println!("get_phone_number(): {:?}", result);
+    }
+
+    #[test]
+    fn get_user_info() {
+        let session_key = "BCREPPq0Xm8b+Bil1yAgpA==";
+        let iv = "3A248WrsuFISSgMP+sXxSg==";
+        let data="mw4VXdDmVx91LNLGdJDyvWk6d2yNdnQLULr1OYxwV6a/4HN79tJZEV72g15Il/qbOWFXR8DVOwUYrEXeSijOfE+9ZHTVZyGGjioJCmkUAShIdLaleWCGLfRPKF7K77aLuWNg+S8nii4YcDi/btYcMsYwKtFyrg6aX2ABBE3AAfWPZ94a4QiJGXXOJNdhb4UhAKhWTcg4wNNWKqxw1hJRq2rzXcRJQPiXRUvnWECDPicecIxp448v+ZrudLx8kkQe6yUm77ntX2Cx8v9O865mPKERt4iMOArzYnj3dzhGhlrXkwLbNP3X7uYpErGTWcnme8k4fFtB0z2JwNSoHJ00U4rMgoWQU4iVp8cZsrOm3YJHOFNWECTzxNTxPd7ao98ju2nj9y5nrsJK1Hx7ONXcwxMG5zh0UXO6OqXjC04Aum25ZIWRQaIyj7aDg41Vfm7XMLbnBiZVRapGlzHiZYz5FTS2VpSy5c82eD9k6a2nxis=";
+        let result = Miniprogram::get_user_info(session_key, iv, data).unwrap();
+        println!("get_user_info(): {:?}", result);
     }
 }
