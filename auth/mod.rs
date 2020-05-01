@@ -1,8 +1,7 @@
 #![allow(dead_code)]
 
-mod context;
 mod error;
-pub mod graphql_schema;
+pub mod graphql;
 pub mod models;
 pub mod repository;
 pub mod service;
