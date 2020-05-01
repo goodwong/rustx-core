@@ -13,7 +13,7 @@ pub struct User {
 }
 
 // 用户登录时生成的token
-#[derive(Identifiable, Queryable, Associations, Insertable, Clone)]
+#[derive(Identifiable, Queryable, Associations, Clone)]
 #[belongs_to(User)]
 #[table_name = "user_tokens"]
 pub struct UserToken {
