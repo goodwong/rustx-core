@@ -182,12 +182,20 @@ mod tests {
         // 为了在testing下看到logging
         use env_logger;
         env_logger::init();
-
-        let code = env::var("JS_CODE").expect("code_to_session `JS_CODE` not set");
         let app = Miniprogram::new(Config::from_env());
-        let session = app.code_to_session(&code).await?;
-        println!("session: {:?}", session);
 
+        // check invalid code
+        let invalid_result = app.code_to_session("").await;
+        assert!(invalid_result.is_err());
+
+        // check valid code
+        match env::var("JS_CODE") {
+            Ok(code) => {
+                let session = app.code_to_session(&code).await?;
+                println!("session: {:?}", session);
+            }
+            Err(_) => (),
+        }
         Ok(())
     }
 

@@ -266,16 +266,33 @@ mod tests {
     use super::super::repository::{create_refresh_token, create_user, InsertToken, InsertUser};
     use super::super::token::{Token, TOKEN_LIFE_HOURS};
     use super::{AuthService, TokenResponse};
+    use crate::auth::models::User;
     use crate::db_connection::{establish_connection, PgPool};
     use chrono::{Duration, Utc};
-    use dotenv::dotenv;
-    use std::env;
     type TestResult<O> = Result<O, Box<dyn std::error::Error + Send + Sync>>;
 
     fn db_pool() -> PgPool {
+        use dotenv::dotenv;
+        use std::env;
+
         dotenv().ok();
         let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
         establish_connection(database_url)
+    }
+
+    fn auth_service(pool: PgPool) -> AuthService {
+        let cipher_key = "Q+mvRWovv4NHANIuevkXtAmC3r2wp8bjyrKCPTgm7m0=";
+        AuthService::new(pool.clone(), cipher_key)
+    }
+
+    async fn mock_user(pool: PgPool) -> TestResult<User> {
+        let conn = pool.get()?;
+        let _insert = InsertUser {
+            username: "test".to_string() + &Utc::now().format("%s").to_string(),
+            name: "test".to_string(),
+            avatar: "test".to_string(),
+        };
+        create_user(_insert, conn).await
     }
 
     #[test]
@@ -290,18 +307,11 @@ mod tests {
     #[tokio::test]
     async fn login() -> TestResult<()> {
         let pool = db_pool();
-        let cipher_key = "Q+mvRWovv4NHANIuevkXtAmC3r2wp8bjyrKCPTgm7m0=";
-        let auth = AuthService::new(pool.clone(), cipher_key);
+        let auth = auth_service(pool.clone());
         // 构建一个测试user
-        let user = {
-            let conn = pool.get()?;
-            let _insert = InsertUser {
-                username: "test".to_string() + &Utc::now().format("%s").to_string(),
-                name: "test".to_string(),
-                avatar: "test".to_string(),
-            };
-            create_user(_insert, conn).await?
-        };
+        let user = mock_user(pool.clone()).await?;
+
+        // todo 以下测试可以分拆到多个方法里面
 
         // 测试一：无效token
         let id = auth.get_identity("an invalid token").await?;
