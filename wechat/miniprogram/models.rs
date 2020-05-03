@@ -9,6 +9,7 @@ pub(super) type AnyResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync
 #[table_name = "wechat_miniprogram_users"]
 pub struct MiniprogramUser {
     pub open_id: String,
+    pub union_id: Option<String>,
     pub nick_name: Option<String>,
     pub gender: Option<i16>, // 0未知 1男性 2女性
     pub language: Option<String>,
