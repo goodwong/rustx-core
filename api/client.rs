@@ -185,7 +185,7 @@ pub enum ClientError {
     InvalidToken,
     #[error("Client Error SystemBusy")]
     SystemBusy,
-    #[error("Client Error:")]
+    #[error("Client Error: {0}")]
     Other(String),
 }
 pub type ClientResult<T> = Result<T, ClientError>;
