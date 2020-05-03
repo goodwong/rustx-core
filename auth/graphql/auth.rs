@@ -1,6 +1,9 @@
-use super::super::repository::find_user;
-use super::context::Context;
+use crate::api::wechat_miniprogram::Code2SessionResponse;
+use crate::auth::graphql::context::Context;
 use crate::auth::models::User as UserModel;
+use crate::auth::repository as user_repository;
+use crate::wechat::miniprogram::repository as miniprogram_repository;
+use diesel::result::Error as DieselError;
 use juniper;
 use juniper::FieldResult;
 
@@ -47,13 +50,31 @@ pub(crate) async fn query_me(context: &Context) -> FieldResult<User> {
         .ok_or_else(|| "未登录".into())
 }
 
-pub(crate) async fn login(context: &Context) -> FieldResult<bool> {
-    let user = find_user(1, context.pool.get()?).await?;
-    context.identity.login(user).await?;
-    Ok(true)
+/// login 登录
+/// 结果：true - 登录成功; false - 登录失败，需要提供手机号码注册登录；如果发生error，例如数据库连接错误，请重试
+pub(crate) async fn login(js_code: String, context: &Context) -> FieldResult<bool> {
+    let Code2SessionResponse { openid, .. } = context.miniprogram.code_to_session(&js_code).await?;
+    login_by_wechat_miniprogram_openid(&openid, context).await
 }
 
 pub(crate) async fn logout(context: &Context) -> FieldResult<bool> {
     context.identity.logout().await?;
     Ok(true)
+}
+
+pub enum LoginResponse {
+    Success,
+    Need,
+}
+
+async fn login_by_wechat_miniprogram_openid(openid: &str, context: &Context) -> FieldResult<bool> {
+    match miniprogram_repository::find(openid, context.pool.get()?).await {
+        Ok(mp_user) => {
+            let user = user_repository::find_user(mp_user.user_id, context.pool.get()?).await?;
+            context.identity.login(user).await?;
+            Ok(true)
+        }
+        Err(DieselError::NotFound) => Ok(false),
+        Err(e) => Err(e.into()),
+    }
 }

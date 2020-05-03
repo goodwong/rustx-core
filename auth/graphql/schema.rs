@@ -17,8 +17,11 @@ pub struct MutationRoot;
 #[juniper::graphql_object(Context = Context)]
 impl MutationRoot {
     #[doc = "登陆"]
-    async fn login(context: &Context) -> FieldResult<bool> {
-        auth_resolver::login(context).await
+    #[graphql(
+        description = "结果：true - 登录成功; false - 登录失败，需要提供手机号码注册登录；如果发生error，例如数据库连接错误，请重试"
+    )]
+    async fn login(js_code: String, context: &Context) -> FieldResult<bool> {
+        auth_resolver::login(js_code, context).await
     }
 
     #[doc = "注销登陆态"]
