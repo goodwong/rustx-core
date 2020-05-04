@@ -126,13 +126,9 @@ impl Identity {
     // 登出
     pub async fn logout(&self) -> AuthResult<()> {
         // 1. delete token in db
-        let refresh_token_id = self
-            .get_token()
-            .await
-            .map(|t| t.refresh_token_id as i32)
-            .ok_or("empty token")?;
-        let conn = self.config.db.get()?;
-        destroy_refresh_token(refresh_token_id, conn).await?;
+        if let Some(t) = self.get_token().await {
+            destroy_refresh_token(t.refresh_token_id as i32, self.config.db.get()?).await?
+        }
 
         // todo:
         // 2. mark the user logout, so the token will be outdated
@@ -263,42 +259,18 @@ pub enum TokenResponse {
 
 #[cfg(test)]
 mod tests {
-    use super::super::repository::{create_refresh_token, create_user, InsertToken, InsertUser};
+    use super::super::repository::{create_refresh_token, InsertToken};
     use super::super::token::{Token, TOKEN_LIFE_HOURS};
     use super::{AuthService, TokenResponse};
-    use crate::auth::models::User;
-    use crate::db_connection::{establish_connection, PgPool};
     use chrono::{Duration, Utc};
-    type TestResult<O> = Result<O, Box<dyn std::error::Error + Send + Sync>>;
 
-    fn db_pool() -> PgPool {
-        use dotenv::dotenv;
-        use std::env;
-
-        dotenv().ok();
-        let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-        establish_connection(database_url)
-    }
-
-    fn auth_service(pool: PgPool) -> AuthService {
-        let cipher_key = "Q+mvRWovv4NHANIuevkXtAmC3r2wp8bjyrKCPTgm7m0=";
-        AuthService::new(pool.clone(), cipher_key)
-    }
-
-    async fn mock_user(pool: PgPool) -> TestResult<User> {
-        let conn = pool.get()?;
-        let _insert = InsertUser {
-            username: "test".to_string() + &Utc::now().format("%s").to_string(),
-            name: "test".to_string(),
-            avatar: "test".to_string(),
-        };
-        create_user(_insert, conn).await
-    }
+    use crate::auth::tests;
+    use crate::auth::tests::TestResult;
 
     #[test]
     #[should_panic]
     fn invalid_cipher_key() {
-        let pool = db_pool();
+        let pool = tests::db_pool();
         // should be panicked here
         // because of invalid key length
         AuthService::new(pool, "invalid key length");
@@ -306,10 +278,10 @@ mod tests {
 
     #[tokio::test]
     async fn login() -> TestResult<()> {
-        let pool = db_pool();
-        let auth = auth_service(pool.clone());
+        let pool = tests::db_pool();
+        let auth = tests::auth_service(pool.clone());
         // 构建一个测试user
-        let user = mock_user(pool.clone()).await?;
+        let user = tests::mock_user(pool.clone()).await?;
 
         // todo 以下测试可以分拆到多个方法里面
 

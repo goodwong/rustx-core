@@ -1,5 +1,68 @@
 use base_62;
 
+use crate::auth::graphql::Context;
+use crate::auth::models::User;
+use crate::auth::repository as user_repository;
+use crate::auth::service::AuthService;
+use crate::db_connection::{establish_connection, PgPool};
+use crate::wechat::miniprogram::models::MiniprogramUser;
+use crate::wechat::miniprogram::repository as miniprogram_repository;
+use diesel::NotFound;
+
+pub type TestResult<O> = Result<O, Box<dyn std::error::Error + Send + Sync>>;
+
+pub fn db_pool() -> PgPool {
+    use dotenv::dotenv;
+    use std::env;
+
+    dotenv().ok();
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    establish_connection(database_url)
+}
+
+pub fn auth_service(pool: PgPool) -> AuthService {
+    let cipher_key = "Q+mvRWovv4NHANIuevkXtAmC3r2wp8bjyrKCPTgm7m0=";
+    AuthService::new(pool.clone(), cipher_key)
+}
+
+pub async fn mock_user(pool: PgPool) -> TestResult<User> {
+    let username = "mock_user_username".to_string();
+    let _insert = user_repository::InsertUser {
+        username: username.clone(),
+        name: "for test".to_string(),
+        avatar: Default::default(),
+    };
+
+    match user_repository::find_user_by_username(username, pool.get()?).await {
+        Ok(user) => Ok(user),
+        Err(NotFound) => user_repository::create_user(_insert, pool.get()?).await,
+        Err(err) => Err(err.into()),
+    }
+}
+
+pub async fn mock_miniprogram_user(pool: PgPool) -> TestResult<MiniprogramUser> {
+    let user = mock_user(pool.clone()).await?;
+
+    let open_id = "mock_miniprogram_user_openid".to_string();
+    match miniprogram_repository::find(open_id.clone(), pool.get()?).await {
+        Ok(mp_user) => Ok(mp_user),
+        Err(NotFound) => miniprogram_repository::create(open_id, user.id, pool.get()?).await,
+        Err(err) => Err(err.into()),
+    }
+}
+
+pub async fn mock_context(db_pool: PgPool) -> TestResult<Context> {
+    use std::sync::Arc;
+
+    let auth = auth_service(db_pool.clone());
+    let identity = auth.get_identity("an invalid token").await?;
+
+    use crate::api::wechat_miniprogram::{Config, Miniprogram};
+    let miniprogram = Miniprogram::new(Config::from_env());
+
+    Ok(Context::new(db_pool, identity, Arc::new(miniprogram)))
+}
+
 #[test]
 fn base62_vs_base64() {
     let input = "123456781234567812345678";

@@ -15,10 +15,18 @@ pub async fn find_user(user_id: i32, conn: PgPooledConnection) -> QueryResult<Us
     .await
     .unwrap()
 }
-pub async fn find_user_by_username() -> QueryResult<User> {
-    todo!()
+pub async fn find_user_by_username(
+    _username: String,
+    conn: PgPooledConnection,
+) -> QueryResult<User> {
+    task::spawn_blocking(move || {
+        use crate::diesel_schema::users::dsl::*;
+        users.filter(username.eq(_username)).first::<User>(&conn)
+    })
+    .await
+    .unwrap()
 }
-pub async fn find_user_by_token(_token: &str) -> QueryResult<User> {
+pub async fn find_user_by_token(_token: String) -> QueryResult<User> {
     // let token = find_token(token_str);
     // find_user(token.user_id)
     todo!()

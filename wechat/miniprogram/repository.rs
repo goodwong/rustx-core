@@ -3,8 +3,7 @@ use crate::db_connection::PgPooledConnection;
 use diesel::prelude::*;
 use tokio::task;
 
-pub async fn find(_open_id: &str, conn: PgPooledConnection) -> QueryResult<MiniprogramUser> {
-    let _open_id = _open_id.to_owned();
+pub async fn find(_open_id: String, conn: PgPooledConnection) -> QueryResult<MiniprogramUser> {
     task::spawn_blocking(move || {
         use crate::diesel_schema::wechat_miniprogram_users::dsl::*;
         wechat_miniprogram_users
@@ -16,12 +15,10 @@ pub async fn find(_open_id: &str, conn: PgPooledConnection) -> QueryResult<Minip
 }
 
 pub async fn create(
-    _open_id: &str,
+    _open_id: String,
     userid: i32,
     conn: PgPooledConnection,
 ) -> AnyResult<MiniprogramUser> {
-    let _open_id = _open_id.to_owned();
-
     task::spawn_blocking(move || {
         use crate::diesel_schema::wechat_miniprogram_users::dsl::*;
         let insert = MiniprogramUser {

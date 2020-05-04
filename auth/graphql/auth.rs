@@ -54,7 +54,7 @@ pub(crate) async fn query_me(context: &Context) -> FieldResult<User> {
 /// 结果：true - 登录成功; false - 登录失败，需要提供手机号码注册登录；如果发生error，例如数据库连接错误，请重试
 pub(crate) async fn login(js_code: String, context: &Context) -> FieldResult<bool> {
     let Code2SessionResponse { openid, .. } = context.miniprogram.code_to_session(&js_code).await?;
-    login_by_wechat_miniprogram_openid(&openid, context).await
+    login_by_wechat_miniprogram_openid(openid, context).await
 }
 
 pub(crate) async fn logout(context: &Context) -> FieldResult<bool> {
@@ -62,19 +62,65 @@ pub(crate) async fn logout(context: &Context) -> FieldResult<bool> {
     Ok(true)
 }
 
-pub enum LoginResponse {
-    Success,
-    Need,
-}
-
-async fn login_by_wechat_miniprogram_openid(openid: &str, context: &Context) -> FieldResult<bool> {
+async fn login_by_wechat_miniprogram_openid(
+    openid: String,
+    context: &Context,
+) -> FieldResult<bool> {
     match miniprogram_repository::find(openid, context.pool.get()?).await {
         Ok(mp_user) => {
             let user = user_repository::find_user(mp_user.user_id, context.pool.get()?).await?;
             context.identity.login(user).await?;
             Ok(true)
         }
-        Err(DieselError::NotFound) => Ok(false),
+        Err(DieselError::NotFound) => {
+            context.identity.logout().await?;
+            Ok(false)
+        }
         Err(e) => Err(e.into()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::auth::service::TokenResponse;
+    use crate::auth::tests;
+    use crate::auth::tests::TestResult;
+
+    #[tokio::test]
+    async fn login_by_wechat_miniprogram_openid() -> TestResult<()> {
+        let pool = tests::db_pool();
+        // mock user
+        let user = tests::mock_user(pool.clone()).await?;
+        // mock miniprogram_user
+        let mp_user = tests::mock_miniprogram_user(pool.clone()).await?;
+        // mock context
+        let ctx = tests::mock_context(pool.clone()).await?;
+        let id = &ctx.identity;
+
+        // success
+        let login_success = super::login_by_wechat_miniprogram_openid(mp_user.open_id, &ctx)
+            .await
+            .map_err(|e| format!("{:?}", e))?;
+        assert!(login_success);
+        assert_eq!(id.is_login().await, true);
+        assert_eq!(user.id, id.user_id().await.unwrap());
+        assert_eq!(user, id.user().await.unwrap());
+        assert!(matches!(
+            id.to_response().await,
+            Some(TokenResponse::Set(_, _))
+        ));
+
+        // failure
+        let login_failure =
+            super::login_by_wechat_miniprogram_openid("invalid_openid".to_owned(), &ctx)
+                .await
+                .map_err(|e| format!("{:?}", e))?;
+        assert!(!login_failure);
+        assert_eq!(id.is_login().await, false);
+        assert_eq!(id.user_id().await, None);
+        assert_eq!(id.user().await, None);
+        assert_eq!(id.to_response().await, Some(TokenResponse::Delete));
+
+        Ok(())
     }
 }
