@@ -4,6 +4,7 @@ use super::aes_cbc_128;
 use base64;
 use serde::{Deserialize, Serialize};
 use std::str;
+use std::sync::Arc;
 
 type AnyhowResult<O> = Result<O, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -29,28 +30,36 @@ impl Config {
 }
 
 // miniprogram 结构
-pub struct Miniprogram {
+pub struct Miniprogram(Arc<MiniprogramInner>);
+/// Returns a new `Pool` referencing the same state as `self`.
+impl Clone for Miniprogram {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+struct MiniprogramInner {
     cfg: Config,
     client: Client,
 }
 impl Miniprogram {
-    pub fn new(cfg: Config) -> Miniprogram {
+    pub fn new(cfg: Config) -> Self {
         let token_url = "https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=APPID&secret=APPSECRET";
         let token_url = token_url
             .replace("APPID", &cfg.appid)
             .replace("APPSECRET", &cfg.secret);
         let client = Client::new(ClientConfig { token_url });
 
-        Miniprogram { cfg, client }
+        Self(Arc::new(MiniprogramInner { cfg, client }))
     }
 
     pub async fn access_token(&self) -> ClientResult<String> {
-        self.client.access_token().await
+        self.0.client.access_token().await
     }
 
     #[cfg(test)]
     pub(crate) async fn set_invalid_access_token(&self) {
-        self.client.set_invalid_access_token().await
+        self.0.client.set_invalid_access_token().await
     }
 }
 
@@ -69,7 +78,8 @@ impl Miniprogram {
         }
 
         let payload = MsgSecCheckRequest { content };
-        self.client
+        self.0
+            .client
             .post::<_, ApiErrorResponse>(url, &payload)
             .await?;
         Ok(())
@@ -77,10 +87,10 @@ impl Miniprogram {
     pub async fn code_to_session(&self, code: &str) -> ClientResult<Code2SessionResponse> {
         let url = "https://api.weixin.qq.com/sns/jscode2session?appid=APPID&secret=SECRET&js_code=JSCODE&grant_type=authorization_code";
         let url = url
-            .replace("APPID", &self.cfg.appid)
-            .replace("SECRET", &self.cfg.secret)
+            .replace("APPID", &self.0.cfg.appid)
+            .replace("SECRET", &self.0.cfg.secret)
             .replace("JSCODE", code);
-        self.client.get::<Code2SessionResponse>(&url).await
+        self.0.client.get::<Code2SessionResponse>(&url).await
     }
 
     pub fn get_phone_number(

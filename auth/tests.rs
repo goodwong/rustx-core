@@ -52,8 +52,6 @@ pub async fn mock_miniprogram_user(pool: PgPool) -> TestResult<MiniprogramUser> 
 }
 
 pub async fn mock_context(db_pool: PgPool) -> TestResult<Context> {
-    use std::sync::Arc;
-
     let auth = auth_service(db_pool.clone());
     let identity = auth.get_identity("an invalid token").await?;
 
@@ -63,7 +61,7 @@ pub async fn mock_context(db_pool: PgPool) -> TestResult<Context> {
     Ok(Context::new(
         db_pool,
         identity,
-        Arc::new(miniprogram),
+        miniprogram,
         Default::default(),
     ))
 }
