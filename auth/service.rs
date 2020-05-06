@@ -154,6 +154,17 @@ impl Identity {
     //    self.get_response().await
     //}
 }
+
+// 只对测试pub的一个宏，感谢{2}群 AurevoirXavier指点
+macro_rules! pub_when_test {
+    ($($f:tt)*) => {
+        #[cfg(test)]
+        pub $($f)*
+        #[cfg(not(test))]
+        $($f)*
+    };
+}
+
 // 内部方法
 impl Identity {
     /// 解析token string获取Identity。
@@ -246,8 +257,10 @@ impl Identity {
     }
 
     // pub(super) 仅为了其它模块的test
-    pub(super) async fn get_response(&self) -> Option<TokenResponse> {
-        self.response.read().await.clone()
+    pub_when_test! {
+        async fn get_response(&self) -> Option<TokenResponse> {
+            self.response.read().await.clone()
+        }
     }
     async fn set_response(&self, response: Option<TokenResponse>) {
         *self.response.write().await = response;
