@@ -111,7 +111,7 @@ mod tests {
         assert_eq!(user.id, id.user_id().await.unwrap());
         assert_eq!(user, id.user().await.unwrap());
         assert!(matches!(
-            id.to_response().await,
+            id.get_response().await,
             Some(TokenResponse::Set(_, _))
         ));
 

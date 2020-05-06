@@ -148,9 +148,11 @@ impl Identity {
     }
 
     // 输出cookie
-    pub async fn to_response(&self) -> Option<TokenResponse> {
-        self.get_response().await
-    }
+    //
+    // update: 放在 mod integrate_with_actix_session 实现
+    //pub async fn to_response(&self) -> Option<TokenResponse> {
+    //    self.get_response().await
+    //}
 }
 // 内部方法
 impl Identity {
@@ -243,7 +245,8 @@ impl Identity {
         *self.token.write().await = token;
     }
 
-    async fn get_response(&self) -> Option<TokenResponse> {
+    // pub(super) 仅为了其它模块的test
+    pub(super) async fn get_response(&self) -> Option<TokenResponse> {
         self.response.read().await.clone()
     }
     async fn set_response(&self, response: Option<TokenResponse>) {
@@ -290,7 +293,7 @@ mod tests {
         assert_eq!(id.is_login().await, false);
         assert_eq!(id.user_id().await, None);
         assert_eq!(id.user().await, None);
-        assert_eq!(id.to_response().await, Some(TokenResponse::Delete));
+        assert_eq!(id.get_response().await, Some(TokenResponse::Delete));
 
         // 测试三：登陆
         id.login(user.clone()).await?;
@@ -298,11 +301,11 @@ mod tests {
         assert_eq!(user.id, id.user_id().await.unwrap());
         assert_eq!(user, id.user().await.unwrap());
         assert!(matches!(
-            id.to_response().await,
+            id.get_response().await,
             Some(TokenResponse::Set(_, _))
         ));
-        println!("token: {:?}", id.to_response().await.unwrap());
-        let _token_str = match id.to_response().await {
+        println!("token: {:?}", id.get_response().await.unwrap());
+        let _token_str = match id.get_response().await {
             Some(TokenResponse::Set(t, _)) => t,
             _ => Default::default(),
         };
@@ -312,7 +315,7 @@ mod tests {
         assert_eq!(id.is_login().await, false);
         assert_eq!(id.user_id().await, None);
         assert_eq!(id.user().await, None);
-        assert_eq!(id.to_response().await, Some(TokenResponse::Delete));
+        assert_eq!(id.get_response().await, Some(TokenResponse::Delete));
 
         // 测试五：使用登出的token（主动失效的token）
         // todo 登出后token应该失效
@@ -321,7 +324,7 @@ mod tests {
         assert_eq!(id.is_login().await, false);
         assert_eq!(id.user_id().await, None);
         assert_eq!(id.user().await, None);
-        assert_eq!(id.to_response(), Some(TokenResponse::Delete));
+        assert_eq!(id.get_response(), Some(TokenResponse::Delete));
         */
 
         // 测试二：有效token
@@ -341,7 +344,7 @@ mod tests {
         assert_eq!(id.is_login().await, true);
         assert_eq!(user.id, id.user_id().await.unwrap());
         assert_eq!(user, id.user().await.unwrap());
-        assert_eq!(id.to_response().await, None);
+        assert_eq!(id.get_response().await, None);
 
         // 测试六：过期的token（renew）
         let token_str = {
@@ -371,10 +374,10 @@ mod tests {
         assert_eq!(user.id, id.user_id().await.unwrap());
         assert_eq!(user, id.user().await.unwrap());
         assert!(matches!(
-            id.to_response().await,
+            id.get_response().await,
             Some(TokenResponse::Set(_, _))
         ));
-        if let Some(TokenResponse::Set(new_token_str, _)) = id.to_response().await {
+        if let Some(TokenResponse::Set(new_token_str, _)) = id.get_response().await {
             println!("renew token:");
             println!("old token: {}", token_str);
             println!("new token: {}", new_token_str);
@@ -386,8 +389,42 @@ mod tests {
         assert_eq!(id.is_login().await, false);
         assert_eq!(id.user_id().await, None);
         assert_eq!(id.user().await, None);
-        assert_eq!(id.to_response().await, Some(TokenResponse::Delete));
+        assert_eq!(id.get_response().await, Some(TokenResponse::Delete));
 
         Ok(())
+    }
+}
+
+// 集成到 actix-session
+// (将这部分与外部集成的代码独立出来，以后换掉的可能性有点大)
+mod integrate_with_actix_session {
+    use super::{AuthResult, AuthService, Identity, TokenResponse};
+    use actix_session::Session as ActixSession;
+
+    const SESSION_KEY: &str = "token";
+
+    impl AuthService {
+        pub async fn from_request(&self, req_session: &ActixSession) -> AuthResult<Identity> {
+            let token_str = req_session
+                .get::<String>(SESSION_KEY)
+                .unwrap_or_else(|_| None)
+                .unwrap_or_else(Default::default);
+            debug!("token from_request(): {:?}", &token_str);
+
+            Identity::from_request(self.config.clone(), &token_str).await
+        }
+    }
+
+    impl Identity {
+        pub async fn to_response(&self, req_session: &ActixSession) {
+            match self.get_response().await {
+                Some(TokenResponse::Set(value, _exp)) => {
+                    debug!("token to_response(): {:?}", &value);
+                    req_session.set(SESSION_KEY, value).unwrap_or_default()
+                }
+                Some(TokenResponse::Delete) => req_session.remove(SESSION_KEY),
+                None => (),
+            }
+        }
     }
 }

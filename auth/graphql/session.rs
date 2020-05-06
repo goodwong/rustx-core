@@ -1,4 +1,3 @@
-use actix_session::Session as ActixSession;
 use anyhow::Error;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -6,7 +5,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-const SESSION_KEY: &str = "session";
 /// The high-level interface you use to modify session data.
 ///
 /// Session object could be obtained with
@@ -139,41 +137,52 @@ impl Session {
     */
 }
 
-type SessionHashMap = HashMap<String, String>;
-
-impl Session {
-    pub fn from_request(req_session: &ActixSession) -> Self {
-        let state = req_session
-            .get::<SessionHashMap>(SESSION_KEY)
-            .unwrap_or_else(|_| None)
-            .unwrap_or_else(Default::default);
-        debug!("session from_request(): {:?}", &state);
-
-        Session(Arc::new(RwLock::new(SessionInner {
-            state,
-            ..Default::default()
-        })))
-    }
-
-    pub async fn to_response(&self, req_session: &ActixSession) {
-        match self.get_changes().await {
-            (SessionStatus::Changed, Some(state)) | (SessionStatus::Renewed, Some(state)) => {
-                let state: SessionHashMap = state.collect();
-                debug!("session to_response(): {:?}", &state);
-
-                req_session.set(SESSION_KEY, state).ok(); // ignore error result
-            }
-            (SessionStatus::Purged, _) => req_session.remove(SESSION_KEY),
-            // todo: set a new session cookie upon first request (new client)
-            (SessionStatus::Unchanged, _) => (),
-            _ => (),
-        }
-    }
-}
-
 #[cfg(test)]
 impl Default for Session {
     fn default() -> Self {
         Session(Arc::new(RwLock::new(SessionInner::default())))
+    }
+}
+
+// 集成到 actix-session
+// (将这部分与外部集成的代码独立出来，以后换掉的可能性有点大)
+mod integrate_with_actix_session {
+    use super::{Session, SessionInner, SessionStatus};
+    use actix_session::Session as ActixSession;
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    use tokio::sync::RwLock;
+
+    type SessionHashMap = HashMap<String, String>;
+    const SESSION_KEY: &str = "session";
+
+    impl Session {
+        pub fn from_request(req_session: &ActixSession) -> Self {
+            let state = req_session
+                .get::<SessionHashMap>(SESSION_KEY)
+                .unwrap_or_else(|_| None)
+                .unwrap_or_else(Default::default);
+            debug!("session from_request(): {:?}", &state);
+
+            Session(Arc::new(RwLock::new(SessionInner {
+                state,
+                ..Default::default()
+            })))
+        }
+
+        pub async fn to_response(&self, req_session: &ActixSession) {
+            match self.get_changes().await {
+                (SessionStatus::Changed, Some(state)) | (SessionStatus::Renewed, Some(state)) => {
+                    let state: SessionHashMap = state.collect();
+                    debug!("session to_response(): {:?}", &state);
+
+                    req_session.set(SESSION_KEY, state).ok(); // ignore error result
+                }
+                (SessionStatus::Purged, _) => req_session.remove(SESSION_KEY),
+                // todo: set a new session cookie upon first request (new client)
+                (SessionStatus::Unchanged, _) => (),
+                _ => (),
+            }
+        }
     }
 }
