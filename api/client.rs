@@ -59,7 +59,7 @@ impl Client {
         // 说明中间(因为锁，可能需要等待很久)有其他进程reset或fetch过这个token了，
         // 则不再reset
         if token.access_token == old_token {
-            *token = AccessTokenEntiry::default();
+            *token = AccessTokenInner::default();
         }
     }
 
@@ -157,7 +157,7 @@ impl Client {
         }
     }
 
-    async fn fetch_access_token(&self) -> ClientResult<AccessTokenEntiry> {
+    async fn fetch_access_token(&self) -> ClientResult<AccessTokenInner> {
         #[derive(Serialize, Deserialize, Debug)]
         struct ApiTokenResponse {
             access_token: String,
@@ -169,7 +169,7 @@ impl Client {
         let expires_in = Duration::seconds(result.expires_in.unwrap_or(7200)); // todo 钉钉固定7200，其它平台须注意此处
         info!("fetch_access_token() -> {}", &result.access_token);
 
-        let token = AccessTokenEntiry::new(result.access_token, expires_in);
+        let token = AccessTokenInner::new(result.access_token, expires_in);
         Ok(token)
     }
 }
@@ -190,37 +190,37 @@ pub enum ClientError {
 }
 pub type ClientResult<T> = Result<T, ClientError>;
 
-struct AccessToken(RwLock<AccessTokenEntiry>);
+struct AccessToken(RwLock<AccessTokenInner>);
 impl Default for AccessToken {
     fn default() -> Self {
-        AccessToken(RwLock::new(AccessTokenEntiry::default()))
+        AccessToken(RwLock::new(AccessTokenInner::default()))
     }
 }
 impl AccessToken {
-    async fn get_token(&self) -> AccessTokenEntiry {
+    async fn get_token(&self) -> AccessTokenInner {
         self.0.read().await.clone()
     }
-    async fn set_token(&self, token: AccessTokenEntiry) {
+    async fn set_token(&self, token: AccessTokenInner) {
         *self.0.write().await = token
     }
 }
 
 #[derive(Debug, Clone)]
-struct AccessTokenEntiry {
+struct AccessTokenInner {
     access_token: String,
     expired_at: DateTime<Utc>,
 }
-impl Default for AccessTokenEntiry {
-    fn default() -> AccessTokenEntiry {
-        AccessTokenEntiry {
-            access_token: "".to_string(),
+impl Default for AccessTokenInner {
+    fn default() -> AccessTokenInner {
+        AccessTokenInner {
+            access_token: Default::default(),
             expired_at: Utc::now() - Duration::seconds(10),
         }
     }
 }
-impl AccessTokenEntiry {
-    pub(crate) fn new(access_token: String, ttl: Duration) -> AccessTokenEntiry {
-        AccessTokenEntiry {
+impl AccessTokenInner {
+    pub(crate) fn new(access_token: String, ttl: Duration) -> AccessTokenInner {
+        AccessTokenInner {
             access_token,
             expired_at: Utc::now() + ttl,
         }

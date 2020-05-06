@@ -45,7 +45,7 @@ pub async fn create_user(user: InsertUser, conn: PgPooledConnection) -> AuthResu
         diesel::insert_into(users)
             .values(&user)
             .get_result::<User>(&conn)
-            .map_err(|e| e.into())
+            .map_err(Into::into)
     })
     .await
     .unwrap()
@@ -94,7 +94,7 @@ pub async fn create_refresh_token(
         diesel::insert_into(user_tokens)
             .values(&token)
             .get_result::<UserToken>(&conn)
-            .map_err(|e| e.into())
+            .map_err(Into::into)
     })
     .await
     .unwrap()
@@ -110,7 +110,7 @@ pub async fn destroy_refresh_token(token_id: i32, conn: PgPooledConnection) -> A
         .set(deleted_at.eq(Some(Utc::now())))
         .execute(&conn)
         .map(|_| ())
-        .map_err(|e| e.into())
+        .map_err(Into::into)
     })
     .await
     .unwrap()
@@ -131,7 +131,7 @@ pub async fn renew_refresh_token(
         .set((hash.eq(hash_str), issued_at.eq(now)))
         .execute(&conn)
         .map(|_| now)
-        .map_err(|e| e.into())
+        .map_err(Into::into)
     })
     .await
     .unwrap()

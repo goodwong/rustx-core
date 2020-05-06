@@ -304,7 +304,7 @@ mod tests {
         println!("token: {:?}", id.to_response().await.unwrap());
         let _token_str = match id.to_response().await {
             Some(TokenResponse::Set(t, _)) => t,
-            _ => "".to_string(),
+            _ => Default::default(),
         };
 
         // 测试四：登出

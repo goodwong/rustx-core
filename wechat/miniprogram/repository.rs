@@ -29,7 +29,7 @@ pub async fn create(
         diesel::insert_into(wechat_miniprogram_users)
             .values(&insert)
             .get_result::<MiniprogramUser>(&conn)
-            .map_err(|e| e.into())
+            .map_err(Into::into)
     })
     .await
     .unwrap()
