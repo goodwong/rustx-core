@@ -7,7 +7,9 @@ use diesel::result::Error as DieselError;
 use juniper;
 use juniper::FieldResult;
 
-const SESSION_KEY_OPENID: &str = "openid";
+const SESSION_KEY_OPENID: &str = "mp_openid";
+const SESSION_KEY_UNIONID: &str = "mp_unionid";
+const SESSION_KEY_SESSIONKEY: &str = "mp_session_key";
 
 #[derive(juniper::GraphQLObject)]
 #[graphql(description = "用户类型")]
@@ -55,8 +57,14 @@ pub(crate) async fn query_me(context: &Context) -> FieldResult<User> {
 /// login 登录
 /// 结果：true - 登录成功; false - 登录失败，需要提供手机号码注册登录；如果发生error，例如数据库连接错误，请重试
 pub(crate) async fn login(js_code: String, context: &Context) -> FieldResult<bool> {
-    let Code2SessionResponse { openid, .. } = context.miniprogram.code_to_session(&js_code).await?;
-    login_by_wechat_miniprogram_openid(openid, context).await
+    let miniprogram_session = context.miniprogram.code_to_session(&js_code).await?;
+    login_by_wechat_miniprogram_openid(miniprogram_session, context).await
+}
+
+/// register
+/// by miniprogram phoneNumber
+pub(crate) async fn register(context: &Context) -> FieldResult<bool> {
+    todo!()
 }
 
 pub(crate) async fn logout(context: &Context) -> FieldResult<bool> {
@@ -65,28 +73,48 @@ pub(crate) async fn logout(context: &Context) -> FieldResult<bool> {
 }
 
 async fn login_by_wechat_miniprogram_openid(
-    openid: String,
+    mp_session: Code2SessionResponse,
     context: &Context,
 ) -> FieldResult<bool> {
-    match miniprogram_repository::find(openid.clone(), context.pool.get()?).await {
+    // 设置session_key，后续登陆、解码用到
+    context
+        .session
+        .set(SESSION_KEY_SESSIONKEY, mp_session.session_key)
+        .await?;
+
+    // 数据库查询是否有记录
+    match miniprogram_repository::find(mp_session.openid.clone(), context.pool.get()?).await {
+        // 顺利登陆
         Ok(mp_user) => {
             let user = user_repository::find_user(mp_user.user_id, context.pool.get()?).await?;
             context.identity.login(user).await?;
             Ok(true)
         }
+
+        // 此情况表示小程序首次登陆
+        // 记住openid/unionid，需前端补充提供手机号
+        // 下一步：如果手机号登陆成功，则绑定该openid至手机号，并从session清除该openid
         Err(DieselError::NotFound) => {
-            // 此情况表示小程序首次登陆
-            // 记住openid，需前端补充提供手机号
-            // 后续：如果手机号登陆成功，则绑定该openid至手机号，并从session清除该openid
-            context.session.set(SESSION_KEY_OPENID, openid).await?;
+            context
+                .session
+                .set(SESSION_KEY_OPENID, mp_session.openid)
+                .await?;
+            if let Some(unionid) = mp_session.unionid {
+                context.session.set(SESSION_KEY_UNIONID, unionid).await?;
+            }
             Ok(false)
         }
         Err(e) => Err(e.into()),
     }
 }
 
+async fn register_by_wechat_miniprogram_phonenumber() {
+    todo!()
+}
+
 #[cfg(test)]
 mod tests {
+    use crate::api::wechat_miniprogram::Code2SessionResponse;
     use crate::auth::service::TokenResponse;
     use crate::auth::tests;
     use crate::auth::tests::TestResult;
@@ -103,7 +131,12 @@ mod tests {
         let id = &ctx.identity;
 
         // success
-        let login_success = super::login_by_wechat_miniprogram_openid(mp_user.open_id, &ctx)
+        let mp_session = Code2SessionResponse {
+            openid: mp_user.open_id,
+            unionid: mp_user.union_id,
+            session_key: Default::default(),
+        };
+        let login_success = super::login_by_wechat_miniprogram_openid(mp_session, &ctx)
             .await
             .map_err(|e| format!("{:?}", e))?;
         assert!(login_success);
