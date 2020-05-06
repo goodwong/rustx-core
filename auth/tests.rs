@@ -60,7 +60,12 @@ pub async fn mock_context(db_pool: PgPool) -> TestResult<Context> {
     use crate::api::wechat_miniprogram::{Config, Miniprogram};
     let miniprogram = Miniprogram::new(Config::from_env());
 
-    Ok(Context::new(db_pool, identity, Arc::new(miniprogram)))
+    Ok(Context::new(
+        db_pool,
+        identity,
+        Arc::new(miniprogram),
+        Default::default(),
+    ))
 }
 
 #[test]

@@ -7,6 +7,8 @@ use diesel::result::Error as DieselError;
 use juniper;
 use juniper::FieldResult;
 
+const SESSION_KEY_OPENID: &str = "openid";
+
 #[derive(juniper::GraphQLObject)]
 #[graphql(description = "用户类型")]
 pub struct User {
@@ -66,14 +68,17 @@ async fn login_by_wechat_miniprogram_openid(
     openid: String,
     context: &Context,
 ) -> FieldResult<bool> {
-    match miniprogram_repository::find(openid, context.pool.get()?).await {
+    match miniprogram_repository::find(openid.clone(), context.pool.get()?).await {
         Ok(mp_user) => {
             let user = user_repository::find_user(mp_user.user_id, context.pool.get()?).await?;
             context.identity.login(user).await?;
             Ok(true)
         }
         Err(DieselError::NotFound) => {
-            context.identity.logout().await?;
+            // 此情况表示小程序首次登陆
+            // 记住openid，需前端补充提供手机号
+            // 后续：如果手机号登陆成功，则绑定该openid至手机号，并从session清除该openid
+            context.session.set(SESSION_KEY_OPENID, openid).await?;
             Ok(false)
         }
         Err(e) => Err(e.into()),
@@ -111,15 +116,8 @@ mod tests {
         ));
 
         // failure
-        let login_failure =
-            super::login_by_wechat_miniprogram_openid("invalid_openid".to_owned(), &ctx)
-                .await
-                .map_err(|e| format!("{:?}", e))?;
-        assert!(!login_failure);
-        assert_eq!(id.is_login().await, false);
-        assert_eq!(id.user_id().await, None);
-        assert_eq!(id.user().await, None);
-        assert_eq!(id.to_response().await, Some(TokenResponse::Delete));
+        // update: 觉得此处login failure不应该自动logout，这个应该是Gateway的事
+        // 所以删掉了这部分测试代码
 
         Ok(())
     }
