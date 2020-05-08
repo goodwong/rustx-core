@@ -56,14 +56,14 @@ pub(crate) async fn query_me(context: &Context) -> FieldResult<User> {
 
 /// login 登录
 /// 结果：true - 登录成功; false - 登录失败，需要提供手机号码注册登录；如果发生error，例如数据库连接错误，请重试
-pub(crate) async fn login(js_code: String, context: &Context) -> FieldResult<bool> {
+pub(crate) async fn login(js_code: String, context: &Context) -> FieldResult<LoginResult> {
     let miniprogram_session = context.miniprogram.code_to_session(&js_code).await?;
     login_by_wechat_miniprogram_openid(miniprogram_session, context).await
 }
 
 /// register
 /// by miniprogram phoneNumber
-pub(crate) async fn register(context: &Context) -> FieldResult<bool> {
+pub(crate) async fn register(_context: &Context) -> FieldResult<bool> {
     todo!()
 }
 
@@ -72,10 +72,30 @@ pub(crate) async fn logout(context: &Context) -> FieldResult<bool> {
     Ok(true)
 }
 
+#[derive(juniper::GraphQLObject)]
+pub(crate) struct LoginResult {
+    success: bool,
+    user: Option<User>,
+}
+impl LoginResult {
+    fn success(u: User) -> Self {
+        Self {
+            success: true,
+            user: Some(u),
+        }
+    }
+    fn failure() -> Self {
+        Self {
+            success: false,
+            user: None,
+        }
+    }
+}
+
 async fn login_by_wechat_miniprogram_openid(
     mp_session: Code2SessionResponse,
     context: &Context,
-) -> FieldResult<bool> {
+) -> FieldResult<LoginResult> {
     // 设置session_key，后续登陆、解码用到
     context
         .session
@@ -87,8 +107,8 @@ async fn login_by_wechat_miniprogram_openid(
         // 顺利登陆
         Ok(mp_user) => {
             let user = user_repository::find_user(mp_user.user_id, context.pool.get()?).await?;
-            context.identity.login(user).await?;
-            Ok(true)
+            context.identity.login(user.clone()).await?;
+            Ok(LoginResult::success(user.into()))
         }
 
         // 此情况表示小程序首次登陆
@@ -102,7 +122,7 @@ async fn login_by_wechat_miniprogram_openid(
             if let Some(unionid) = mp_session.unionid {
                 context.session.set(SESSION_KEY_UNIONID, unionid).await?;
             }
-            Ok(false)
+            Ok(LoginResult::failure())
         }
         Err(e) => Err(e.into()),
     }
@@ -139,7 +159,7 @@ mod tests {
         let login_success = super::login_by_wechat_miniprogram_openid(mp_session, &ctx)
             .await
             .map_err(|e| format!("{:?}", e))?;
-        assert!(login_success);
+        assert!(login_success.success);
         assert_eq!(id.is_login().await, true);
         assert_eq!(user.id, id.user_id().await.unwrap());
         assert_eq!(user, id.user().await.unwrap());
