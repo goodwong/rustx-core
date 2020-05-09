@@ -94,8 +94,13 @@ pub(crate) async fn register(args: RegisterInput, context: &Context) -> FieldRes
 }
 
 pub(crate) async fn logout(context: &Context) -> FieldResult<bool> {
-    context.identity.logout().await?;
-    Ok(true)
+    if context.identity.is_login().await {
+        context.identity.logout().await?;
+        context.session.purge().await;
+        Ok(true)
+    } else {
+        Ok(false)
+    }
 }
 
 #[derive(juniper::GraphQLObject)]
@@ -175,13 +180,19 @@ async fn register_by_wechat_miniprogram_phonenumber(
                 };
                 mp_repository::update(update, context.pool.get()?).await?;
             }
+
             // 清理session的openid/unionid
             context.session.remove(SESSION_KEY_OPENID).await;
             context.session.remove(SESSION_KEY_UNIONID).await;
+
+            // 设置identity为登陆态
+            context.identity.login(exist_user.clone()).await?;
+
             Ok(LoginResult::success(exist_user.into()))
         }
         Err(DieselError::NotFound) => {
-            context.session.purge().await;
+            // update: 管理员登记号码后，仍然可以再次注册，所以session不要清空
+            // context.session.purge().await;
             Ok(LoginResult::failure())
         }
         Err(e) => Err(e.into()),
@@ -226,6 +237,7 @@ mod tests {
             .await
             .map_err(|e| format!("{:?}", e))?;
         assert_eq!(result.success, true);
+        assert_eq!(ctx.identity.is_login().await, true);
         // update: 这里不应该再测试identity的内部状态，因为这个是auth.service做的事情，有service::tests负责测试，
         // 这个函数有设置session，应该测试是否正确的set session
         assert_eq!(
@@ -245,6 +257,7 @@ mod tests {
             .await
             .map_err(|e| format!("{:?}", e))?;
         assert_eq!(result.success, false);
+        assert_eq!(ctx.identity.is_login().await, false);
         assert_eq!(
             ctx.session.get::<String>(SESSION_KEY_SESSIONKEY).await?,
             Some(mock_session_key.to_owned())
@@ -282,6 +295,7 @@ mod tests {
                 .map_err(|e| e.message().to_owned())?;
         assert_eq!(result.success, true);
         assert!(result.user.is_some());
+        assert_eq!(ctx.identity.is_login().await, true);
 
         // clear up
         tests::clear_mock_miniprogram_user(MOCK_MP_OPENID_2, pool.clone()).await?;
