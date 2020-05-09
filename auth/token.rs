@@ -14,6 +14,11 @@ pub(crate) const NONCE_LENGTH: usize = 12;
 pub(super) const TOKEN_LIFE_HOURS: i64 = 1;
 pub(super) const REFRESH_TOKEN_LIFE_DAYS: i64 = 30;
 
+#[cfg(not(test))]
+const HASH_COST: u32 = bcrypt::DEFAULT_COST;
+#[cfg(test)]
+const HASH_COST: u32 = 4; // bcrypt::MIN_COST<private>
+
 #[derive(Copy, Clone)]
 pub(crate) struct Token {
     pub nonce: [u8; NONCE_LENGTH],
@@ -92,7 +97,7 @@ impl Token {
         // 1. COST值超出有效范围，这里使用bcrypt::DEFAULT_COST
         // 2. password(即这里的nonce)包含\0字符，上面通过loop规避了，
         // 因此这里可以安全的unwrap()
-        let hash = bcrypt::hash(nonce, bcrypt::DEFAULT_COST).unwrap();
+        let hash = bcrypt::hash(nonce, HASH_COST).unwrap();
         (nonce, hash)
     }
 
