@@ -63,7 +63,7 @@ pub(crate) async fn login(js_code: String, context: &Context) -> FieldResult<Log
     login_by_wechat_miniprogram_openid(miniprogram_session, context).await
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, juniper::GraphQLInputObject)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct RegisterInput {
     iv: String,
@@ -196,7 +196,7 @@ mod tests {
     use crate::auth::tests::TestResult;
 
     const MOCK_USERNAME: &str = "auth_mock_user_username";
-    const MOCK_PHONE_NUMBER: &str = "13510614266";
+    const MOCK_PHONE_NUMBER: &str = "18899990000";
     const MOCK_MP_OPENID: &str = "auth_mock_miniprogram_user_openid";
     const MOCK_MP_OPENID_2: &str = "auth_mock_miniprogram_user_openid_2"; // 多线程测试中不可共用，所以需要区分不同的名字
 

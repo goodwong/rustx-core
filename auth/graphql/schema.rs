@@ -1,5 +1,5 @@
 use super::auth as auth_resolver;
-use super::auth::LoginResult;
+use super::auth::{LoginResult, RegisterInput};
 use super::context::Context;
 use juniper::EmptySubscription;
 
@@ -24,6 +24,11 @@ impl MutationRoot {
     )]
     async fn login(js_code: String, context: &Context) -> FieldResult<LoginResult> {
         auth_resolver::login(js_code, context).await
+    }
+
+    #[doc = "注册，尝试login后的动作"]
+    async fn register(input: RegisterInput, context: &Context) -> FieldResult<LoginResult> {
+        auth_resolver::register(input, context).await
     }
 
     #[doc = "注销登陆态"]
