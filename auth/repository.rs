@@ -32,7 +32,7 @@ pub async fn find_user_by_token(_token: String) -> QueryResult<User> {
     todo!()
 }
 
-#[derive(Insertable)]
+#[derive(Insertable, Default)]
 #[table_name = "users"]
 pub struct InsertUser {
     pub username: String,
@@ -61,6 +61,37 @@ pub async fn list_user() -> AuthResult<Vec<User>> {
 }
 pub async fn count_user() -> AuthResult<i32> {
     todo!()
+}
+
+// 生存环境，是不允许删除用户的，
+// 所以这里限定只能在测试里面使用
+#[cfg(test)]
+use crate::db_connection::PgPool;
+#[cfg(test)]
+pub async fn delete_user_by_username(_username: &str, pool: PgPool) -> AuthResult<()> {
+    let _username = _username.to_owned();
+    match find_user_by_username(_username.to_owned(), pool.get()?).await {
+        Err(diesel::NotFound) => Ok(()),
+        Err(e) => Err(Box::new(e)),
+        Ok(user) => {
+            task::spawn_blocking(move || {
+                // 先删除tokens
+                use crate::diesel_schema::user_tokens::dsl::*;
+                diesel::delete(user_tokens.filter(user_id.eq(user.id)))
+                    .execute(&pool.get()?)
+                    .map_err(|e| format!("{}", e))?;
+
+                // 再删除users
+                use crate::diesel_schema::users::dsl::*;
+                diesel::delete(users.filter(username.eq(_username)))
+                    .execute(&pool.get()?)
+                    .map(|_| ())
+                    .map_err(|e| format!("{}", e).into())
+            })
+            .await
+            .unwrap()
+        }
+    }
 }
 
 // token...

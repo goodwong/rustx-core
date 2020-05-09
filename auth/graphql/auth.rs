@@ -1,11 +1,13 @@
-use crate::api::wechat_miniprogram::Code2SessionResponse;
+use crate::api::wechat_miniprogram::{Code2SessionResponse, Miniprogram};
 use crate::auth::graphql::context::Context;
 use crate::auth::models::User as UserModel;
 use crate::auth::repository as user_repository;
-use crate::wechat::miniprogram::repository as miniprogram_repository;
+use crate::wechat::miniprogram::models::MiniprogramUser;
+use crate::wechat::miniprogram::repository as mp_repository;
 use diesel::result::Error as DieselError;
 use juniper;
 use juniper::FieldResult;
+use serde::{Deserialize, Serialize};
 
 const SESSION_KEY_OPENID: &str = "mp_openid";
 const SESSION_KEY_UNIONID: &str = "mp_unionid";
@@ -61,10 +63,34 @@ pub(crate) async fn login(js_code: String, context: &Context) -> FieldResult<Log
     login_by_wechat_miniprogram_openid(miniprogram_session, context).await
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RegisterInput {
+    iv: String,
+    encrypted_data: String,
+}
+
 /// register
 /// by miniprogram phoneNumber
-pub(crate) async fn register(_context: &Context) -> FieldResult<bool> {
-    todo!()
+pub(crate) async fn register(args: RegisterInput, context: &Context) -> FieldResult<LoginResult> {
+    let phone_number = {
+        let session_key = context
+            .session
+            .get::<String>(SESSION_KEY_SESSIONKEY)
+            .await?
+            .ok_or("session_key不存在session里")?;
+        let iv = args.iv;
+        let data = args.encrypted_data;
+        Miniprogram::get_phone_number(&session_key, &iv, &data)?.phone_number
+    };
+    let open_id = context
+        .session
+        .get::<String>(SESSION_KEY_OPENID)
+        .await?
+        .ok_or("open_id不存在session里")?;
+    let union_id = context.session.get::<String>(SESSION_KEY_UNIONID).await?;
+
+    register_by_wechat_miniprogram_phonenumber(phone_number, open_id, union_id, context).await
 }
 
 pub(crate) async fn logout(context: &Context) -> FieldResult<bool> {
@@ -92,6 +118,7 @@ impl LoginResult {
     }
 }
 
+// 分离代码，方便测试
 async fn login_by_wechat_miniprogram_openid(
     mp_session: Code2SessionResponse,
     context: &Context,
@@ -103,7 +130,7 @@ async fn login_by_wechat_miniprogram_openid(
         .await?;
 
     // 数据库查询是否有记录
-    match miniprogram_repository::find(mp_session.openid.clone(), context.pool.get()?).await {
+    match mp_repository::find(mp_session.openid.clone(), context.pool.get()?).await {
         // 顺利登陆
         Ok(mp_user) => {
             let user = user_repository::find_user(mp_user.user_id, context.pool.get()?).await?;
@@ -128,49 +155,137 @@ async fn login_by_wechat_miniprogram_openid(
     }
 }
 
-async fn register_by_wechat_miniprogram_phonenumber() {
-    todo!()
+async fn register_by_wechat_miniprogram_phonenumber(
+    phone_number: String,
+    open_id: String,
+    union_id: Option<String>,
+    context: &Context,
+) -> FieldResult<LoginResult> {
+    // 根据电话查找exist_user
+    // todo: fallback - 根据union_id查找exist_user，暂时不做
+    match user_repository::find_user_by_username(phone_number, context.pool.get()?).await {
+        Ok(exist_user) => {
+            // 关联exist_user与miniprogram_user
+            let mp_user =
+                mp_repository::create(open_id, exist_user.id, context.pool.get()?).await?;
+            if let Some(_) = union_id {
+                let update = MiniprogramUser {
+                    union_id,
+                    ..mp_user
+                };
+                mp_repository::update(update, context.pool.get()?).await?;
+            }
+            // 清理session的openid/unionid
+            context.session.remove(SESSION_KEY_OPENID).await;
+            context.session.remove(SESSION_KEY_UNIONID).await;
+            Ok(LoginResult::success(exist_user.into()))
+        }
+        Err(DieselError::NotFound) => {
+            context.session.purge().await;
+            Ok(LoginResult::failure())
+        }
+        Err(e) => Err(e.into()),
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::{SESSION_KEY_OPENID, SESSION_KEY_SESSIONKEY};
     use crate::api::wechat_miniprogram::Code2SessionResponse;
-    use crate::auth::service::TokenResponse;
     use crate::auth::tests;
     use crate::auth::tests::TestResult;
+
+    const MOCK_USERNAME: &str = "auth_mock_user_username";
+    const MOCK_PHONE_NUMBER: &str = "13510614266";
+    const MOCK_MP_OPENID: &str = "auth_mock_miniprogram_user_openid";
+    const MOCK_MP_OPENID_2: &str = "auth_mock_miniprogram_user_openid_2"; // 多线程测试中不可共用，所以需要区分不同的名字
 
     #[tokio::test]
     async fn login_by_wechat_miniprogram_openid() -> TestResult<()> {
         let pool = tests::db_pool();
+
+        // clear up for testing
+        tests::clear_mock_miniprogram_user(MOCK_MP_OPENID, pool.clone()).await?;
+        tests::clear_mock_user(MOCK_USERNAME, pool.clone()).await?;
+
         // mock user
-        let user = tests::mock_user(pool.clone()).await?;
+        let user = tests::mock_user(MOCK_USERNAME, pool.clone()).await?;
         // mock miniprogram_user
-        let mp_user = tests::mock_miniprogram_user(pool.clone()).await?;
+        let mp_user = tests::mock_miniprogram_user(MOCK_MP_OPENID, user.id, pool.clone()).await?;
         // mock context
         let ctx = tests::mock_context(pool.clone()).await?;
-        let id = &ctx.identity;
 
         // success
+        let mock_session_key = "mock session_key";
         let mp_session = Code2SessionResponse {
             openid: mp_user.open_id,
             unionid: mp_user.union_id,
-            session_key: Default::default(),
+            session_key: mock_session_key.to_owned(),
         };
-        let login_success = super::login_by_wechat_miniprogram_openid(mp_session, &ctx)
+        let result = super::login_by_wechat_miniprogram_openid(mp_session, &ctx)
             .await
             .map_err(|e| format!("{:?}", e))?;
-        assert!(login_success.success);
-        assert_eq!(id.is_login().await, true);
-        assert_eq!(user.id, id.user_id().await.unwrap());
-        assert_eq!(user, id.user().await.unwrap());
-        assert!(matches!(
-            id.get_response().await,
-            Some(TokenResponse::Set(_, _))
-        ));
+        assert_eq!(result.success, true);
+        // update: 这里不应该再测试identity的内部状态，因为这个是auth.service做的事情，有service::tests负责测试，
+        // 这个函数有设置session，应该测试是否正确的set session
+        assert_eq!(
+            ctx.session.get::<String>(SESSION_KEY_SESSIONKEY).await?,
+            Some(mock_session_key.to_owned())
+        );
 
         // failure
-        // update: 觉得此处login failure不应该自动logout，这个应该是Gateway的事
-        // 所以删掉了这部分测试代码
+        let ctx = tests::mock_context(pool.clone()).await?;
+        let mock_openid = "mock openid not exist in database";
+        let mp_session = Code2SessionResponse {
+            openid: mock_openid.to_owned(),
+            unionid: None,
+            session_key: mock_session_key.to_owned(),
+        };
+        let result = super::login_by_wechat_miniprogram_openid(mp_session, &ctx)
+            .await
+            .map_err(|e| format!("{:?}", e))?;
+        assert_eq!(result.success, false);
+        assert_eq!(
+            ctx.session.get::<String>(SESSION_KEY_SESSIONKEY).await?,
+            Some(mock_session_key.to_owned())
+        );
+        assert_eq!(
+            ctx.session.get::<String>(SESSION_KEY_OPENID).await?,
+            Some(mock_openid.to_owned()),
+        );
+
+        // clear up
+        tests::clear_mock_miniprogram_user(MOCK_MP_OPENID, pool.clone()).await?;
+        tests::clear_mock_user(MOCK_USERNAME, pool.clone()).await?;
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn register_by_wechat_miniprogram_phonenumber() -> TestResult<()> {
+        let pool = tests::db_pool();
+
+        // clear up for testing
+        tests::clear_mock_miniprogram_user(MOCK_MP_OPENID_2, pool.clone()).await?;
+        tests::clear_mock_user(MOCK_PHONE_NUMBER, pool.clone()).await?;
+
+        // mock user by phone number
+        tests::mock_user(MOCK_PHONE_NUMBER, pool.clone()).await?;
+        // mock context
+        let ctx = tests::mock_context(pool.clone()).await?;
+
+        let phone_number = MOCK_PHONE_NUMBER.to_owned();
+        let open_id = MOCK_MP_OPENID_2.to_owned();
+        let result =
+            super::register_by_wechat_miniprogram_phonenumber(phone_number, open_id, None, &ctx)
+                .await
+                .map_err(|e| e.message().to_owned())?;
+        assert_eq!(result.success, true);
+        assert!(result.user.is_some());
+
+        // clear up
+        tests::clear_mock_miniprogram_user(MOCK_MP_OPENID_2, pool.clone()).await?;
+        tests::clear_mock_user(MOCK_PHONE_NUMBER, pool.clone()).await?;
 
         Ok(())
     }

@@ -39,3 +39,18 @@ pub async fn update(u: MiniprogramUser, conn: PgPooledConnection) -> QueryResult
         .await
         .unwrap()
 }
+
+// 生存环境，是不允许删除用户资料的，
+// 所以这里限定只能在测试里面使用
+#[cfg(test)]
+pub async fn delete(_openid: &str, conn: PgPooledConnection) -> QueryResult<()> {
+    let _openid = _openid.to_owned();
+    task::spawn_blocking(move || {
+        use crate::diesel_schema::wechat_miniprogram_users::dsl::*;
+        diesel::delete(wechat_miniprogram_users.filter(open_id.eq(_openid)))
+            .execute(&conn)
+            .map(|_| ())
+    })
+    .await
+    .unwrap()
+}

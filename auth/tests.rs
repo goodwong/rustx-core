@@ -7,7 +7,6 @@ use crate::auth::service::AuthService;
 use crate::db_connection::{establish_connection, PgPool};
 use crate::wechat::miniprogram::models::MiniprogramUser;
 use crate::wechat::miniprogram::repository as miniprogram_repository;
-use diesel::NotFound;
 
 pub type TestResult<O> = Result<O, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -25,30 +24,34 @@ pub fn auth_service(pool: PgPool) -> AuthService {
     AuthService::new(pool.clone(), cipher_key)
 }
 
-pub async fn mock_user(pool: PgPool) -> TestResult<User> {
-    let username = "mock_user_username".to_string();
-    let _insert = user_repository::InsertUser {
-        username: username.clone(),
-        name: "for test".to_string(),
+pub async fn mock_user(username: &str, pool: PgPool) -> TestResult<User> {
+    let insert = user_repository::InsertUser {
+        username: username.to_owned(),
+        name: "for test".to_owned(),
         avatar: Default::default(),
     };
 
-    match user_repository::find_user_by_username(username, pool.get()?).await {
-        Ok(user) => Ok(user),
-        Err(NotFound) => user_repository::create_user(_insert, pool.get()?).await,
-        Err(err) => Err(err.into()),
-    }
+    user_repository::create_user(insert, pool.get()?).await
 }
 
-pub async fn mock_miniprogram_user(pool: PgPool) -> TestResult<MiniprogramUser> {
-    let user = mock_user(pool.clone()).await?;
+pub async fn clear_mock_user(username: &str, pool: PgPool) -> TestResult<()> {
+    user_repository::delete_user_by_username(username, pool)
+        .await
+        .map_err(Into::into)
+}
 
-    let open_id = "mock_miniprogram_user_openid".to_string();
-    match miniprogram_repository::find(open_id.clone(), pool.get()?).await {
-        Ok(mp_user) => Ok(mp_user),
-        Err(NotFound) => miniprogram_repository::create(open_id, user.id, pool.get()?).await,
-        Err(err) => Err(err.into()),
-    }
+pub async fn mock_miniprogram_user(
+    open_id: &str,
+    user_id: i32,
+    pool: PgPool,
+) -> TestResult<MiniprogramUser> {
+    miniprogram_repository::create(open_id.to_owned(), user_id, pool.get()?).await
+}
+
+pub async fn clear_mock_miniprogram_user(open_id: &str, pool: PgPool) -> TestResult<()> {
+    miniprogram_repository::delete(open_id, pool.get()?)
+        .await
+        .map_err(Into::into)
 }
 
 pub async fn mock_context(db_pool: PgPool) -> TestResult<Context> {
@@ -64,6 +67,15 @@ pub async fn mock_context(db_pool: PgPool) -> TestResult<Context> {
         miniprogram,
         Default::default(),
     ))
+}
+
+#[tokio::test]
+async fn clear_mock_user_test() {
+    let pool = db_pool();
+
+    clear_mock_user("not_exist_users_username", pool)
+        .await
+        .unwrap();
 }
 
 #[test]

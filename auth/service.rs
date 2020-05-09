@@ -283,6 +283,8 @@ mod tests {
     use crate::auth::tests;
     use crate::auth::tests::TestResult;
 
+    const MOCK_USERNAME: &str = "service_mock_user_username";
+
     #[test]
     #[should_panic]
     fn invalid_cipher_key() {
@@ -295,9 +297,13 @@ mod tests {
     #[tokio::test]
     async fn login() -> TestResult<()> {
         let pool = tests::db_pool();
+
+        // clear up for testing
+        tests::clear_mock_user(MOCK_USERNAME, pool.clone()).await?;
+
         let auth = tests::auth_service(pool.clone());
         // 构建一个测试user
-        let user = tests::mock_user(pool.clone()).await?;
+        let user = tests::mock_user(MOCK_USERNAME, pool.clone()).await?;
 
         // todo 以下测试可以分拆到多个方法里面
 
@@ -403,6 +409,9 @@ mod tests {
         assert_eq!(id.user_id().await, None);
         assert_eq!(id.user().await, None);
         assert_eq!(id.get_response().await, Some(TokenResponse::Delete));
+
+        // clear up
+        tests::clear_mock_user(MOCK_USERNAME, pool.clone()).await?;
 
         Ok(())
     }
