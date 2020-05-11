@@ -44,22 +44,10 @@ impl Client {
     pub async fn access_token(&self) -> ClientResult<String> {
         let token = self.token.get_token().await;
         if !token.valid() {
-            let new_token = self.fetch_access_token().await?;
-            self.token.set_token(new_token.clone()).await;
+            let new_token = self.fetch_access_token(token.access_token).await?;
             Ok(new_token.access_token)
         } else {
             Ok(token.access_token)
-        }
-    }
-
-    pub async fn reset_access_token(&self, old_token: String) {
-        let mut token = self.token.0.write().await;
-        // 再次判断，避免排队reset
-        // 如token已经变化，
-        // 说明中间(因为锁，可能需要等待很久)有其他进程reset或fetch过这个token了，
-        // 则不再reset
-        if token.access_token == old_token {
-            *token = AccessTokenInner::default();
         }
     }
 
@@ -149,7 +137,7 @@ impl Client {
                 Ok(_) => (),
             }
             match &result {
-                Err(ClientError::InvalidToken) => self.reset_access_token(token_str).await,
+                Err(ClientError::InvalidToken) => self.fetch_access_token(token_str).await.map(|_|())?,
                 Err(ClientError::SystemBusy) => continue,
                 Err(_) => break result,
                 Ok(_) => break result,
@@ -157,7 +145,17 @@ impl Client {
         }
     }
 
-    async fn fetch_access_token(&self) -> ClientResult<AccessTokenInner> {
+    async fn fetch_access_token(&self, old_token: String) -> ClientResult<AccessTokenInner> {
+        let mut token = self.token.0.write().await;
+        // 再次判断，避免竞态fetch
+        // 如token已经变化，
+        // 说明中间(因为锁，可能需要等待很久)有其他进程fetch过这个token了，
+        // 则不再fetch
+        if token.access_token != old_token {
+            return Ok(token.clone())
+        }
+
+        // fetch...
         #[derive(Serialize, Deserialize, Debug)]
         struct ApiTokenResponse {
             access_token: String,
@@ -169,8 +167,9 @@ impl Client {
         let expires_in = Duration::seconds(result.expires_in.unwrap_or(7200)); // todo 钉钉固定7200，其它平台须注意此处
         info!("fetch_access_token() -> {}", &result.access_token);
 
-        let token = AccessTokenInner::new(result.access_token, expires_in);
-        Ok(token)
+        let new_token = AccessTokenInner::new(result.access_token, expires_in);
+        *token = new_token.clone();
+        Ok(new_token)
     }
 }
 
