@@ -4,7 +4,7 @@ use crate::db_connection::PgPooledConnection;
 use crate::diesel_schema::{user_tokens, users};
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
-use tokio::task;
+use async_std::task;
 
 // user...
 pub async fn find_user(user_id: i32, conn: PgPooledConnection) -> QueryResult<User> {
@@ -13,7 +13,6 @@ pub async fn find_user(user_id: i32, conn: PgPooledConnection) -> QueryResult<Us
         users.filter(id.eq(user_id)).first::<User>(&conn)
     })
     .await
-    .unwrap()
 }
 pub async fn find_user_by_username(
     _username: String,
@@ -24,7 +23,6 @@ pub async fn find_user_by_username(
         users.filter(username.eq(_username)).first::<User>(&conn)
     })
     .await
-    .unwrap()
 }
 pub async fn find_user_by_token(_token: String) -> QueryResult<User> {
     // let token = find_token(token_str);
@@ -48,7 +46,6 @@ pub async fn create_user(user: InsertUser, conn: PgPooledConnection) -> AuthResu
             .map_err(Into::into)
     })
     .await
-    .unwrap()
 }
 pub async fn update_user() -> AuthResult<()> {
     todo!()
@@ -89,7 +86,6 @@ pub async fn delete_user_by_username(_username: &str, pool: PgPool) -> AuthResul
                     .map_err(|e| format!("{}", e).into())
             })
             .await
-            .unwrap()
         }
     }
 }
@@ -107,7 +103,6 @@ pub async fn find_refresh_token(
             .first::<UserToken>(&conn)
     })
     .await
-    .unwrap()
 }
 #[derive(Insertable)]
 #[table_name = "user_tokens"]
@@ -128,7 +123,6 @@ pub async fn create_refresh_token(
             .map_err(Into::into)
     })
     .await
-    .unwrap()
 }
 pub async fn destroy_refresh_token(token_id: i32, conn: PgPooledConnection) -> AuthResult<()> {
     task::spawn_blocking(move || {
@@ -144,7 +138,6 @@ pub async fn destroy_refresh_token(token_id: i32, conn: PgPooledConnection) -> A
         .map_err(Into::into)
     })
     .await
-    .unwrap()
 }
 pub async fn renew_refresh_token(
     token_id: i32,
@@ -165,5 +158,4 @@ pub async fn renew_refresh_token(
         .map_err(Into::into)
     })
     .await
-    .unwrap()
 }

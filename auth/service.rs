@@ -11,7 +11,7 @@ use crate::db_connection::PgPool;
 use base64;
 use chrono::{DateTime, Utc};
 use diesel::result::Error::NotFound;
-use tokio::sync::RwLock;
+use async_std::sync::RwLock;
 
 pub struct AuthService {
     config: Config,
@@ -294,7 +294,7 @@ mod tests {
         AuthService::new(pool, "invalid key length");
     }
 
-    #[tokio::test]
+    #[async_std::test]
     async fn login() -> TestResult<()> {
         let pool = tests::db_pool();
 
@@ -419,6 +419,7 @@ mod tests {
 
 // 集成到 actix-session
 // (将这部分与外部集成的代码独立出来，以后换掉的可能性有点大)
+/*
 mod integrate_with_actix_session {
     use super::{AuthResult, AuthService, Identity, TokenResponse};
     use actix_session::Session as ActixSession;
@@ -450,3 +451,4 @@ mod integrate_with_actix_session {
         }
     }
 }
+*/

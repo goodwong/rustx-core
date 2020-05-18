@@ -3,7 +3,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use async_std::sync::RwLock;
 
 /// The high-level interface you use to modify session data.
 ///
@@ -146,12 +146,13 @@ impl Default for Session {
 
 // 集成到 actix-session
 // (将这部分与外部集成的代码独立出来，以后换掉的可能性有点大)
+/*
 mod integrate_with_actix_session {
     use super::{Session, SessionInner, SessionStatus};
     use actix_session::Session as ActixSession;
     use std::collections::HashMap;
     use std::sync::Arc;
-    use tokio::sync::RwLock;
+    use async_std::sync::RwLock;
 
     type SessionHashMap = HashMap<String, String>;
     const SESSION_KEY: &str = "session";
@@ -186,3 +187,4 @@ mod integrate_with_actix_session {
         }
     }
 }
+*/

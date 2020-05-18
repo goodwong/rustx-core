@@ -211,7 +211,7 @@ mod tests {
     const MOCK_MP_OPENID: &str = "auth_mock_miniprogram_user_openid";
     const MOCK_MP_OPENID_2: &str = "auth_mock_miniprogram_user_openid_2"; // 多线程测试中不可共用，所以需要区分不同的名字
 
-    #[tokio::test]
+    #[async_std::test]
     async fn login_by_wechat_miniprogram_openid() -> TestResult<()> {
         let pool = tests::db_pool();
 
@@ -274,7 +274,7 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
+    #[async_std::test]
     async fn register_by_wechat_miniprogram_phonenumber() -> TestResult<()> {
         let pool = tests::db_pool();
 

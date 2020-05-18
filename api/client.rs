@@ -1,9 +1,9 @@
+use async_std::sync::RwLock;
 use chrono::{DateTime, Duration, Utc};
 use http::Method;
-use reqwest;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use surf;
 use thiserror::Error as ThisError;
-use tokio::sync::RwLock;
 
 // 配置
 // 1. access_token 的response 2. varify错误类型
@@ -30,12 +30,12 @@ impl Client {
     where
         O: DeserializeOwned,
     {
-        self.request(Method::GET, url, &()).await
+        self.request::<(), _>(Method::GET, url, None).await
     }
 
-    pub async fn post<T, O>(&self, url: &str, payload: &T) -> ClientResult<O>
+    pub async fn post<T, O>(&self, url: &str, payload: Option<&T>) -> ClientResult<O>
     where
-        T: Serialize + ?Sized,
+        T: Serialize,
         O: DeserializeOwned,
     {
         self.request(Method::POST, url, payload).await
@@ -59,20 +59,27 @@ impl Client {
 }
 
 impl Client {
-    async fn raw_request<T, O>(method: Method, url: &str, payload: &T) -> ClientResult<O>
+    async fn raw_request<T, O>(method: Method, url: &str, payload: Option<&T>) -> ClientResult<O>
     where
-        T: Serialize + ?Sized,
+        T: Serialize,
         O: DeserializeOwned,
     {
         // request...
-        let client = reqwest::Client::new();
-        let builder = match method {
-            Method::POST => client.post(url),
-            Method::GET => client.get(url),
+        let request = match method {
+            Method::POST => surf::post(url),
+            Method::GET => surf::get(url),
             _ => panic!("Invalid Mehtod: {}", method),
         };
         debug!("\t=> raw_request() send: {} {}", method, url);
-        let response = builder.json(payload).send().await?.text().await?;
+        let request = if let Some(body) = payload {
+            request.body_json(body)?
+        } else {
+            request
+        };
+        let response = request
+            .recv_string()
+            .await
+            .map_err(|e| ClientError::Request(e))?;
         debug!("\t<= raw_request() response: {}", response);
 
         // check error...
@@ -99,15 +106,15 @@ impl Client {
             Some(0) => Ok(()),
             Some(-1) => Err(ClientError::SystemBusy),
             Some(40001) | Some(40014) | Some(41001) => Err(ClientError::InvalidToken),
-            Some(_) => Err(ClientError::Other(format!("{:?}", error))),
+            Some(_) => Err(ClientError::Other(format!("check_error: {:?}", error))),
         }?;
         Ok(())
     }
 
     // 自动处理access_token
-    async fn request<T, O>(&self, method: Method, url: &str, payload: &T) -> ClientResult<O>
+    async fn request<T, O>(&self, method: Method, url: &str, payload: Option<&T>) -> ClientResult<O>
     where
-        T: Serialize + ?Sized,
+        T: Serialize,
         O: DeserializeOwned,
     {
         // auto retry...
@@ -137,7 +144,9 @@ impl Client {
                 Ok(_) => (),
             }
             match &result {
-                Err(ClientError::InvalidToken) => self.fetch_access_token(token_str).await.map(|_|())?,
+                Err(ClientError::InvalidToken) => {
+                    self.fetch_access_token(token_str).await.map(|_| ())?
+                }
                 Err(ClientError::SystemBusy) => continue,
                 Err(_) => break result,
                 Ok(_) => break result,
@@ -152,7 +161,7 @@ impl Client {
         // 说明中间(因为锁，可能需要等待很久)有其他进程fetch过这个token了，
         // 则不再fetch
         if token.access_token != old_token {
-            return Ok(token.clone())
+            return Ok(token.clone());
         }
 
         // fetch...
@@ -163,7 +172,8 @@ impl Client {
         }
 
         let result: ApiTokenResponse =
-            Self::raw_request(Method::GET, &self.cfg.token_url, &()).await?;
+            Self::raw_request::<(), ApiTokenResponse>(Method::GET, &self.cfg.token_url, None)
+                .await?;
         let expires_in = Duration::seconds(result.expires_in.unwrap_or(7200)); // todo 钉钉固定7200，其它平台须注意此处
         info!("fetch_access_token() -> {}", &result.access_token);
 
@@ -176,8 +186,8 @@ impl Client {
 // 错误类型
 #[derive(ThisError, Debug)]
 pub enum ClientError {
-    #[error(transparent)]
-    Reqwest(#[from] reqwest::Error),
+    #[error("Request Error: {0}")]
+    Request(surf::Error),
     #[error(transparent)]
     Serde(#[from] serde_json::error::Error),
     #[error("Client Error InvalidToken")]
@@ -230,11 +240,4 @@ impl AccessTokenInner {
 }
 
 #[cfg(test)]
-mod tests {
-    #[test]
-    fn new_api_request() {
-        //let api_request = Client::new(Config{
-        //
-        //})
-    }
-}
+mod tests {}

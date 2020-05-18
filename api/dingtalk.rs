@@ -116,7 +116,7 @@ mod tests {
         println!("cfg: {:#?}", cfg);
     }
 
-    #[tokio::test]
+    #[async_std::test]
     async fn get_access_token() -> TestResult<()> {
         let cfg = Config::from_env();
         let dd = Dingtalk::new(cfg);
@@ -125,7 +125,7 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
+    #[async_std::test]
     async fn auto_refresh_access_token() -> TestResult<()> {
         let dd = Dingtalk::new(Config::from_env());
         dd.access_token().await?;
@@ -134,7 +134,7 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
+    #[async_std::test]
     async fn get_user_info() -> TestResult<()> {
         let dd = Dingtalk::new(Config::from_env());
 

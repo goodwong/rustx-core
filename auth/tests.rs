@@ -69,7 +69,7 @@ pub async fn mock_context(db_pool: PgPool) -> TestResult<Context> {
     ))
 }
 
-#[tokio::test]
+#[async_std::test]
 async fn clear_mock_user_test() {
     let pool = db_pool();
 

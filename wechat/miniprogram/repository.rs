@@ -1,7 +1,7 @@
 use super::models::{AnyResult, MiniprogramUser};
 use crate::db_connection::PgPooledConnection;
 use diesel::prelude::*;
-use tokio::task;
+use async_std::task;
 
 pub async fn find(_open_id: String, conn: PgPooledConnection) -> QueryResult<MiniprogramUser> {
     task::spawn_blocking(move || {
@@ -11,7 +11,6 @@ pub async fn find(_open_id: String, conn: PgPooledConnection) -> QueryResult<Min
             .first::<MiniprogramUser>(&conn)
     })
     .await
-    .unwrap()
 }
 
 pub async fn create(
@@ -32,12 +31,10 @@ pub async fn create(
             .map_err(Into::into)
     })
     .await
-    .unwrap()
 }
 pub async fn update(u: MiniprogramUser, conn: PgPooledConnection) -> QueryResult<MiniprogramUser> {
     task::spawn_blocking(move || diesel::update(&u).set(&u).get_result(&conn))
         .await
-        .unwrap()
 }
 
 // 生存环境，是不允许删除用户资料的，
@@ -52,5 +49,4 @@ pub async fn delete(_openid: &str, conn: PgPooledConnection) -> QueryResult<()> 
             .map(|_| ())
     })
     .await
-    .unwrap()
 }

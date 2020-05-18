@@ -80,7 +80,7 @@ impl Miniprogram {
         let payload = MsgSecCheckRequest { content };
         self.0
             .client
-            .post::<_, ApiErrorResponse>(url, &payload)
+            .post::<_, ApiErrorResponse>(url, Some(&payload))
             .await?;
         Ok(())
     }
@@ -160,7 +160,7 @@ mod tests {
         println!("cfg: {:#?}", cfg);
     }
 
-    #[tokio::test]
+    #[async_std::test]
     async fn get_access_token() -> TestResult<()> {
         let cfg = Config::from_env();
         let app = Miniprogram::new(cfg);
@@ -169,7 +169,7 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
+    #[async_std::test]
     async fn auto_refresh_access_token() -> TestResult<()> {
         let app = Miniprogram::new(Config::from_env());
         app.access_token().await?;
@@ -179,15 +179,15 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    #[should_panic]
+    #[async_std::test]
     async fn msg_sec_check() {
         let app = Miniprogram::new(Config::from_env());
 
-        let _ = app.msg_sec_check("法轮功").await.unwrap();
+        assert!(app.msg_sec_check("法轮功").await.is_err());
+        assert!(app.msg_sec_check("没毛病").await.is_ok());
     }
 
-    #[tokio::test]
+    #[async_std::test]
     async fn code_to_session() -> TestResult<()> {
         // 为了在testing下看到logging
         use env_logger;
