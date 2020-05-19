@@ -1,9 +1,9 @@
 use anyhow::Error;
+use async_std::sync::RwLock;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
-use async_std::sync::RwLock;
 
 /// The high-level interface you use to modify session data.
 ///
@@ -28,6 +28,11 @@ use async_std::sync::RwLock;
 /// # fn main() {}
 /// ```
 pub struct Session(Arc<RwLock<SessionInner>>);
+impl Clone for Session {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum SessionStatus {
@@ -188,3 +193,100 @@ mod integrate_with_actix_session {
     }
 }
 */
+
+// 集成到tide
+pub mod integrate_with_tide {
+    use super::{Session, SessionInner, SessionStatus};
+    use async_std::sync::RwLock;
+    use futures::future::BoxFuture;
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    use tide::{http::Cookie, Next, Request};
+
+    type SessionHashMap = HashMap<String, String>;
+
+    const KEY_LENGTH: usize = 32;
+    const COOKIE_KEY: &str = "session";
+
+    #[derive(Debug)]
+    struct Config {
+        cipher_key: [u8; KEY_LENGTH],
+    }
+
+    #[derive(Debug)]
+    pub struct CookieSession {
+        config: Config,
+    }
+
+    impl CookieSession {
+        pub fn new(base64_encoded_key: &str) -> Self {
+            use std::convert::TryInto;
+            let cipher_key =
+                base64::decode(base64_encoded_key).expect("SESSION_KEY must be base64 encoded");
+
+            Self {
+                config: Config {
+                    cipher_key: cipher_key[..]
+                        .try_into()
+                        .unwrap_or_else(|_| panic!("session key LENGTH should be {}", KEY_LENGTH)),
+                },
+            }
+        }
+    }
+    impl<State: Send + Sync + 'static> tide::Middleware<State> for CookieSession {
+        fn handle<'a>(
+            &'a self,
+            req: Request<State>,
+            next: Next<'a, State>,
+        ) -> BoxFuture<'a, tide::Result> {
+            Box::pin(async move {
+                // parse from cookie
+                let session = {
+                    let value = req
+                        .cookie(COOKIE_KEY)
+                        .map(|c: Cookie| c.value().to_owned())
+                        .unwrap_or_default();
+                    let state: SessionHashMap = serde_json::from_str(&value).unwrap_or_default();
+                    Session(Arc::new(RwLock::new(SessionInner {
+                        state,
+                        ..Default::default()
+                    })))
+                };
+
+                // handler run
+                let mut res = next.run(req.set_local(session.clone())).await?;
+
+                // set to cookie response
+                match session.get_changes().await {
+                    (SessionStatus::Changed, Some(state))
+                    | (SessionStatus::Renewed, Some(state)) => {
+                        let state: SessionHashMap = state.collect();
+                        debug!("session response: {:?}", &state);
+
+                        res.set_cookie(Cookie::new(COOKIE_KEY, serde_json::to_string(&state)?))
+                    }
+                    (SessionStatus::Purged, _) => {
+                        res.remove_cookie(Cookie::named(COOKIE_KEY));
+
+                        debug!("session removed!")
+                    }
+                    // todo: set a new session cookie upon first request (new client)
+                    (SessionStatus::Unchanged, _) => (),
+                    _ => (),
+                }
+
+                Ok(res)
+            })
+        }
+    }
+    pub trait RequestExt {
+        fn session(&self) -> &Session;
+    }
+    impl<State> RequestExt for Request<State> {
+        fn session(&self) -> &Session {
+            self.local()
+                .ok_or("CookieSession not initialized!")
+                .unwrap()
+        }
+    }
+}

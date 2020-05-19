@@ -8,10 +8,11 @@ use super::repository::{
 use super::token::{Token, KEY_LENGTH};
 use crate::db_connection::PgPool;
 
+use async_std::sync::RwLock;
 use base64;
 use chrono::{DateTime, Utc};
 use diesel::result::Error::NotFound;
-use async_std::sync::RwLock;
+use std::sync::Arc;
 
 pub struct AuthService {
     config: Config,
@@ -51,7 +52,13 @@ impl AuthService {
     }
 }
 
-pub struct Identity {
+pub struct Identity(Arc<IdentityInner>);
+impl Clone for Identity {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+struct IdentityInner {
     config: Config,
     token: RwLock<Option<Token>>,
     user: RwLock<Option<User>>,
@@ -86,7 +93,7 @@ impl Identity {
 
         if let Some(token) = self.get_token().await {
             let uid = token.user_id as i32;
-            let conn = self.config.db.get().ok()?;
+            let conn = self.0.config.db.get().ok()?;
             let user: Option<User> = find_user(uid, conn).await.ok();
             self.set_user(user.clone()).await;
             user
@@ -104,7 +111,7 @@ impl Identity {
             device: Default::default(),
             hash,
         };
-        let refresh_token = create_refresh_token(insert, self.config.db.get()?).await?;
+        let refresh_token = create_refresh_token(insert, self.0.config.db.get()?).await?;
 
         // pack token string
         let token = Token {
@@ -114,7 +121,7 @@ impl Identity {
             issued_at: refresh_token.issued_at.timestamp(),
         };
         // mut self
-        let (token_str, expires) = token.to_string(&self.config.cipher_key)?;
+        let (token_str, expires) = token.to_string(&self.0.config.cipher_key)?;
         self.set_response(Some(TokenResponse::Set(token_str, expires)))
             .await;
         self.set_token(Some(token)).await;
@@ -127,7 +134,7 @@ impl Identity {
     pub async fn logout(&self) -> AuthResult<()> {
         // 1. delete token in db
         if let Some(t) = self.get_token().await {
-            destroy_refresh_token(t.refresh_token_id as i32, self.config.db.get()?).await?
+            destroy_refresh_token(t.refresh_token_id as i32, self.0.config.db.get()?).await?
         }
 
         // todo:
@@ -197,28 +204,28 @@ impl Identity {
         }
     }
     fn with_none(config: Config) -> Self {
-        Self {
+        Self(Arc::new(IdentityInner {
             config,
             token: RwLock::new(None),
             user: RwLock::new(None),
             response: RwLock::new(None),
-        }
+        }))
     }
     fn with_invalid_token(config: Config) -> Self {
-        Self {
+        Self(Arc::new(IdentityInner {
             config,
             token: RwLock::new(None),
             user: RwLock::new(None),
             response: RwLock::new(Some(TokenResponse::Delete)),
-        }
+        }))
     }
     fn with_token(t: Token, config: Config) -> Self {
-        Self {
+        Self(Arc::new(IdentityInner {
             config,
             token: RwLock::new(Some(t)),
             user: RwLock::new(None),
             response: RwLock::new(None),
-        }
+        }))
     }
     async fn with_renew(t: Token, config: Config) -> AuthResult<Self> {
         // 1. update refresh_token
@@ -234,36 +241,36 @@ impl Identity {
 
         // 3. set to response
         let (token_str, expires) = token.to_string(&config.cipher_key)?;
-        Ok(Self {
+        Ok(Self(Arc::new(IdentityInner {
             config,
             token: RwLock::new(Some(token)),
             user: RwLock::new(None),
             response: RwLock::new(Some(TokenResponse::Set(token_str, expires))),
-        })
+        })))
     }
 
     async fn get_user(&self) -> Option<User> {
-        self.user.read().await.clone()
+        self.0.user.read().await.clone()
     }
     async fn set_user(&self, user: Option<User>) {
-        *self.user.write().await = user;
+        *self.0.user.write().await = user;
     }
 
     async fn get_token(&self) -> Option<Token> {
-        *self.token.read().await
+        *self.0.token.read().await
     }
     async fn set_token(&self, token: Option<Token>) {
-        *self.token.write().await = token;
+        *self.0.token.write().await = token;
     }
 
     // pub(super) 仅为了其它模块的test
     pub_when_test! {
         async fn get_response(&self) -> Option<TokenResponse> {
-            self.response.read().await.clone()
+            self.0.response.read().await.clone()
         }
     }
     async fn set_response(&self, response: Option<TokenResponse>) {
-        *self.response.write().await = response;
+        *self.0.response.write().await = response;
     }
 }
 
@@ -434,7 +441,7 @@ mod integrate_with_actix_session {
                 .unwrap_or_else(Default::default);
             debug!("token from_request(): {:?}", &token_str);
 
-            Identity::from_request(self.config.clone(), &token_str).await
+            Identity::from_request(self.0.config.clone(), &token_str).await
         }
     }
 
@@ -452,3 +459,69 @@ mod integrate_with_actix_session {
     }
 }
 */
+
+// 集成到tide
+pub mod integrate_with_tide {
+    use super::{AuthService, Identity, TokenResponse};
+    use futures::future::BoxFuture;
+    use std::fmt;
+    use tide::{http::Cookie, Next, Request};
+
+    const COOKIE_KEY: &str = "token";
+
+    impl<State: Send + Sync + 'static> tide::Middleware<State> for AuthService {
+        fn handle<'a>(
+            &'a self,
+            req: Request<State>,
+            next: Next<'a, State>,
+        ) -> BoxFuture<'a, tide::Result> {
+            Box::pin(async move {
+                // parse from cookie
+                let identity = {
+                    let token_str = req
+                        .cookie(COOKIE_KEY)
+                        .map(|c: Cookie| c.value().to_owned())
+                        .unwrap_or_default();
+                    self.get_identity(&token_str).await.map_err(|e| {
+                        tide::Error::from_str(tide::StatusCode::InternalServerError, e)
+                    })?
+                };
+
+                // handler run
+                let mut res = next.run(req.set_local(identity.clone())).await?;
+
+                // set to cookie response
+                match identity.get_response().await {
+                    // todo：设置cookie的失效时间
+                    Some(TokenResponse::Set(v, _exp)) => res.set_cookie(Cookie::new(COOKIE_KEY, v)),
+                    Some(TokenResponse::Delete) => res.remove_cookie(Cookie::named(COOKIE_KEY)),
+                    None => (),
+                }
+                match identity.get_response().await {
+                    Some(TokenResponse::Set(v, _exp)) => debug!("token response: {:?}", &v),
+                    Some(TokenResponse::Delete) => debug!("token removed!"),
+                    None => (),
+                }
+
+                Ok(res)
+            })
+        }
+    }
+    // tide middleware 要求 Debug
+    impl std::fmt::Debug for AuthService {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.debug_struct("AuthService")
+                .field("config", &Box::new("{db_pool, cipher_key}"))
+                .finish()
+        }
+    }
+
+    pub trait RequestExt {
+        fn identity(&self) -> &Identity;
+    }
+    impl<State> RequestExt for Request<State> {
+        fn identity(&self) -> &Identity {
+            self.local().ok_or("AuthService not initialized!").unwrap()
+        }
+    }
+}
