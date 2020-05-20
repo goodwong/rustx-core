@@ -76,10 +76,7 @@ impl Client {
         } else {
             request
         };
-        let response = request
-            .recv_string()
-            .await
-            .map_err(|e| ClientError::Request(e))?;
+        let response = request.recv_string().await.map_err(ClientError::Request)?;
         debug!("\t<= raw_request() response: {}", response);
 
         // check error...

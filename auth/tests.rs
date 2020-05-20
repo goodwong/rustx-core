@@ -21,7 +21,7 @@ pub fn db_pool() -> PgPool {
 
 pub fn auth_service(pool: PgPool) -> AuthService {
     let cipher_key = "Q+mvRWovv4NHANIuevkXtAmC3r2wp8bjyrKCPTgm7m0=";
-    AuthService::new(pool.clone(), cipher_key)
+    AuthService::new(pool, cipher_key)
 }
 
 pub async fn mock_user(username: &str, pool: PgPool) -> TestResult<User> {

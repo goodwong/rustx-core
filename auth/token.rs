@@ -128,7 +128,7 @@ mod tests {
             nonce: *nonce,
             user_id: 1005i64,
             refresh_token_id: 12i64,
-            issued_at: 34861628346i64,
+            issued_at: 34_861_628_346_i64,
         }
         .to_string(&*key)
         .expect("失败啦");
@@ -144,7 +144,7 @@ mod tests {
             nonce: *nonce,
             user_id: 1005i64,
             refresh_token_id: 12i64,
-            issued_at: 34861628346i64,
+            issued_at: 34_861_628_346_i64,
         }
         .to_string(&*key)
         .expect("失败啦");

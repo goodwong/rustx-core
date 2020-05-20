@@ -173,7 +173,7 @@ async fn register_by_wechat_miniprogram_phonenumber(
             // 关联exist_user与miniprogram_user
             let mp_user =
                 mp_repository::create(open_id, exist_user.id, context.pool.get()?).await?;
-            if let Some(_) = union_id {
+            if union_id.is_some() {
                 let update = MiniprogramUser {
                     union_id,
                     ..mp_user

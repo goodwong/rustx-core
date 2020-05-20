@@ -186,7 +186,7 @@ mod tests {
         app.access_token().await?;
         app.set_invalid_access_token().await;
 
-        let _ = app.msg_sec_check("平安顺利").await?;
+        app.msg_sec_check("平安顺利").await?;
         Ok(())
     }
 
@@ -210,12 +210,9 @@ mod tests {
         assert!(invalid_result.is_err());
 
         // check valid code
-        match env::var("JS_CODE") {
-            Ok(code) => {
-                let session = app.code_to_session(&code).await?;
-                info!("session: {:?}", session);
-            }
-            Err(_) => (),
+        if let Ok(code) = env::var("JS_CODE") {
+            let session = app.code_to_session(&code).await?;
+            info!("session: {:?}", session);
         }
         Ok(())
     }
