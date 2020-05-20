@@ -67,9 +67,9 @@ impl Token {
         buf.write_all(&refresh_token_id.to_be_bytes())?;
         buf.write_all(&issued_at.to_be_bytes())?;
         // encrypt
-        //println!("buf:  {:02X?}", &buf);
-        //println!("nonce:{:02X?}", cipher_nonce);
-        //println!("key:  {:02X?}", cipher_key);
+        //trace!("buf:  {:02X?}", &buf);
+        //trace!("nonce:{:02X?}", cipher_nonce);
+        //trace!("key:  {:02X?}", cipher_key);
         let key = GenericArray::clone_from_slice(key);
         let aead = Aes256GcmSiv::new(key);
         let nonce_bytes = GenericArray::from_slice(nonce);
@@ -113,8 +113,15 @@ impl Token {
 mod tests {
     use super::Token;
 
+    fn setup() {
+        // 为了在testing下看到logging
+        env_logger::try_init().ok();
+    }
+
     #[test]
     fn token_to_string() {
+        setup();
+
         let nonce = b"12345678_234";
         let key = b"12345678_2345678_2345678_2345678";
         let (token_str, expires) = Token {
@@ -125,10 +132,12 @@ mod tests {
         }
         .to_string(&*key)
         .expect("失败啦");
-        println!("token: {}, expires: {}", token_str, expires);
+        info!("token: {}, expires: {}", token_str, expires);
     }
     #[test]
     fn token_from_string() {
+        setup();
+
         let nonce = b"12345678_234";
         let key = b"12345678_2345678_2345678_2345678";
         let (token_str, expires) = Token {
@@ -139,7 +148,7 @@ mod tests {
         }
         .to_string(&*key)
         .expect("失败啦");
-        println!("token: {}, expires: {}", token_str, expires);
+        info!("token: {}, expires: {}", token_str, expires);
 
         let Token {
             nonce,
@@ -147,7 +156,7 @@ mod tests {
             refresh_token_id,
             issued_at,
         } = Token::from_string(&token_str, key).unwrap();
-        println!(
+        debug!(
             "decrypt: uid{}, tid{}, iat{}, nonce{:x?}",
             user_id, refresh_token_id, issued_at, nonce
         );

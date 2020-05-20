@@ -110,23 +110,34 @@ mod tests {
     use super::{Config, Dingtalk};
     type TestResult<O> = Result<O, Box<dyn std::error::Error + Send + Sync>>;
 
+    fn setup() {
+        // 为了在testing下看到logging
+        env_logger::try_init().ok();
+    }
+
     #[test]
     fn read_config_from_env() {
+        setup();
+
         let cfg = Config::from_env();
-        println!("cfg: {:#?}", cfg);
+        info!("dingtalk cfg: {:#?}", cfg);
     }
 
     #[async_std::test]
     async fn get_access_token() -> TestResult<()> {
+        setup();
+
         let cfg = Config::from_env();
         let dd = Dingtalk::new(cfg);
 
-        println!("access_token: {}", dd.access_token().await?);
+        info!("access_token: {}", dd.access_token().await?);
         Ok(())
     }
 
     #[async_std::test]
     async fn auto_refresh_access_token() -> TestResult<()> {
+        setup();
+
         let dd = Dingtalk::new(Config::from_env());
         dd.access_token().await?;
         dd.set_invalid_access_token().await;
@@ -136,10 +147,11 @@ mod tests {
 
     #[async_std::test]
     async fn get_user_info() -> TestResult<()> {
-        let dd = Dingtalk::new(Config::from_env());
+        setup();
 
+        let dd = Dingtalk::new(Config::from_env());
         let user_info = dd.user_info("manager7140".to_string()).await?;
-        println!("user_info: {:#?}", user_info);
+        debug!("user_info: {:#?}", user_info);
         Ok(())
     }
 }

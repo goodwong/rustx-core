@@ -154,23 +154,34 @@ mod tests {
     use std::env;
     type TestResult<O> = Result<O, Box<dyn std::error::Error + Send + Sync>>;
 
+    fn setup() {
+        // 为了在testing下看到logging
+        env_logger::try_init().ok();
+    }
+
     #[test]
     fn read_config_from_env() {
+        setup();
+
         let cfg = Config::from_env();
-        println!("cfg: {:#?}", cfg);
+        info!("wechat_miniprogram cfg: {:#?}", cfg);
     }
 
     #[async_std::test]
     async fn get_access_token() -> TestResult<()> {
+        setup();
+
         let cfg = Config::from_env();
         let app = Miniprogram::new(cfg);
 
-        println!("access_token: {}", app.access_token().await?);
+        debug!("access_token: {}", app.access_token().await?);
         Ok(())
     }
 
     #[async_std::test]
     async fn auto_refresh_access_token() -> TestResult<()> {
+        setup();
+
         let app = Miniprogram::new(Config::from_env());
         app.access_token().await?;
         app.set_invalid_access_token().await;
@@ -181,6 +192,8 @@ mod tests {
 
     #[async_std::test]
     async fn msg_sec_check() {
+        setup();
+
         let app = Miniprogram::new(Config::from_env());
 
         assert!(app.msg_sec_check("法轮功").await.is_err());
@@ -189,12 +202,10 @@ mod tests {
 
     #[async_std::test]
     async fn code_to_session() -> TestResult<()> {
-        // 为了在testing下看到logging
-        use env_logger;
-        env_logger::init();
-        let app = Miniprogram::new(Config::from_env());
+        setup();
 
         // check invalid code
+        let app = Miniprogram::new(Config::from_env());
         let invalid_result = app.code_to_session("").await;
         assert!(invalid_result.is_err());
 
@@ -202,7 +213,7 @@ mod tests {
         match env::var("JS_CODE") {
             Ok(code) => {
                 let session = app.code_to_session(&code).await?;
-                println!("session: {:?}", session);
+                info!("session: {:?}", session);
             }
             Err(_) => (),
         }
@@ -211,19 +222,23 @@ mod tests {
 
     #[test]
     fn get_phone_number() {
+        setup();
+
         let session_key = "V76yDG9WkjT/ZRBOHaaw/Q==";
         let iv = "C5JfTNchCZl+Np3FzpNGZg==";
         let data = "QfvgdpP7cs7G/6uW135ygEw+C1FP5BQcoKnl8O+bSBwoeo0iNV62jF/5Y2+zrLrUxjppgx2+s+GlM8F6WURuNYGpD1uZpygOKMeSY6bo41QOlkyAa+H8DtNGp2fMnBgal/kP0ILvgfqnDuc5zUE3kjV1HFQNkQgMhIA4HsGm4r+d3C4sSebiAEvMxWs/f07ivPeaeBKPkFf/+PMpcNl0/A==";
         let result = Miniprogram::get_phone_number(session_key, iv, data).unwrap();
-        println!("get_phone_number(): {:?}", result);
+        debug!("get_phone_number(): {:?}", result);
     }
 
     #[test]
     fn get_user_info() {
+        setup();
+
         let session_key = "BCREPPq0Xm8b+Bil1yAgpA==";
         let iv = "3A248WrsuFISSgMP+sXxSg==";
         let data="mw4VXdDmVx91LNLGdJDyvWk6d2yNdnQLULr1OYxwV6a/4HN79tJZEV72g15Il/qbOWFXR8DVOwUYrEXeSijOfE+9ZHTVZyGGjioJCmkUAShIdLaleWCGLfRPKF7K77aLuWNg+S8nii4YcDi/btYcMsYwKtFyrg6aX2ABBE3AAfWPZ94a4QiJGXXOJNdhb4UhAKhWTcg4wNNWKqxw1hJRq2rzXcRJQPiXRUvnWECDPicecIxp448v+ZrudLx8kkQe6yUm77ntX2Cx8v9O865mPKERt4iMOArzYnj3dzhGhlrXkwLbNP3X7uYpErGTWcnme8k4fFtB0z2JwNSoHJ00U4rMgoWQU4iVp8cZsrOm3YJHOFNWECTzxNTxPd7ao98ju2nj9y5nrsJK1Hx7ONXcwxMG5zh0UXO6OqXjC04Aum25ZIWRQaIyj7aDg41Vfm7XMLbnBiZVRapGlzHiZYz5FTS2VpSy5c82eD9k6a2nxis=";
         let result = Miniprogram::get_user_info(session_key, iv, data).unwrap();
-        println!("get_user_info(): {:?}", result);
+        debug!("get_user_info(): {:?}", result);
     }
 }

@@ -211,8 +211,15 @@ mod tests {
     const MOCK_MP_OPENID: &str = "auth_mock_miniprogram_user_openid";
     const MOCK_MP_OPENID_2: &str = "auth_mock_miniprogram_user_openid_2"; // 多线程测试中不可共用，所以需要区分不同的名字
 
+    fn setup() {
+        // 为了在testing下看到logging
+        env_logger::try_init().ok();
+    }
+
     #[async_std::test]
     async fn login_by_wechat_miniprogram_openid() -> TestResult<()> {
+        setup();
+
         let pool = tests::db_pool();
 
         // clear up for testing
@@ -276,6 +283,8 @@ mod tests {
 
     #[async_std::test]
     async fn register_by_wechat_miniprogram_phonenumber() -> TestResult<()> {
+        setup();
+
         let pool = tests::db_pool();
 
         // clear up for testing

@@ -292,6 +292,11 @@ mod tests {
 
     const MOCK_USERNAME: &str = "service_mock_user_username";
 
+    fn setup() {
+        // 为了在testing下看到logging
+        env_logger::try_init().ok();
+    }
+
     #[test]
     #[should_panic]
     fn invalid_cipher_key() {
@@ -303,6 +308,8 @@ mod tests {
 
     #[async_std::test]
     async fn login() -> TestResult<()> {
+        setup();
+
         let pool = tests::db_pool();
 
         // clear up for testing
@@ -330,7 +337,7 @@ mod tests {
             id.get_response().await,
             Some(TokenResponse::Set(_, _))
         ));
-        println!("token: {:?}", id.get_response().await.unwrap());
+        debug!("token: {:?}", id.get_response().await.unwrap());
         let _token_str = match id.get_response().await {
             Some(TokenResponse::Set(t, _)) => t,
             _ => Default::default(),
@@ -404,9 +411,9 @@ mod tests {
             Some(TokenResponse::Set(_, _))
         ));
         if let Some(TokenResponse::Set(new_token_str, _)) = id.get_response().await {
-            println!("renew token:");
-            println!("old token: {}", token_str);
-            println!("new token: {}", new_token_str);
+            debug!("renew token:");
+            debug!("old token: {}", token_str);
+            debug!("new token: {}", new_token_str);
         }
 
         // 测试七：再次使用renew前的token
