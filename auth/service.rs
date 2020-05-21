@@ -431,42 +431,6 @@ mod tests {
     }
 }
 
-// 集成到 actix-session
-// (将这部分与外部集成的代码独立出来，以后换掉的可能性有点大)
-/*
-mod integrate_with_actix_session {
-    use super::{AuthResult, AuthService, Identity, TokenResponse};
-    use actix_session::Session as ActixSession;
-
-    const SESSION_KEY: &str = "token";
-
-    impl AuthService {
-        pub async fn from_request(&self, req_session: &ActixSession) -> AuthResult<Identity> {
-            let token_str = req_session
-                .get::<String>(SESSION_KEY)
-                .unwrap_or_else(|_| None)
-                .unwrap_or_else(Default::default);
-            debug!("token from_request(): {:?}", &token_str);
-
-            Identity::from_request(self.0.config.clone(), &token_str).await
-        }
-    }
-
-    impl Identity {
-        pub async fn to_response(&self, req_session: &ActixSession) {
-            match self.get_response().await {
-                Some(TokenResponse::Set(value, _exp)) => {
-                    debug!("token to_response(): {:?}", &value);
-                    req_session.set(SESSION_KEY, value).unwrap_or_default()
-                }
-                Some(TokenResponse::Delete) => req_session.remove(SESSION_KEY),
-                None => (),
-            }
-        }
-    }
-}
-*/
-
 // 集成到tide
 pub mod integrate_with_tide {
     use super::{AuthService, Identity, TokenResponse};
