@@ -198,6 +198,7 @@ mod integrate_with_actix_session {
 pub mod integrate_with_tide {
     use super::{Session, SessionInner, SessionStatus};
     use async_std::sync::RwLock;
+    use base64;
     use futures::future::BoxFuture;
     use std::collections::HashMap;
     use std::sync::Arc;
@@ -242,11 +243,21 @@ pub mod integrate_with_tide {
             Box::pin(async move {
                 // parse from cookie
                 let session = {
-                    let value = req
+                    let raw_value = req
                         .cookie(COOKIE_KEY)
                         .map(|c: Cookie| c.value().to_owned())
                         .unwrap_or_default();
+
+                    // 解析
+                    let value = std::string::String::from_utf8(
+                        base64::decode(&raw_value).unwrap_or_default(),
+                    )
+                    .unwrap_or_default();
+                    debug!("session => {} ({})", &raw_value, &value);
+
+                    // 转换为hashmap
                     let state: SessionHashMap = serde_json::from_str(&value).unwrap_or_default();
+
                     Session(Arc::new(RwLock::new(SessionInner {
                         state,
                         ..Default::default()
@@ -261,14 +272,20 @@ pub mod integrate_with_tide {
                     (SessionStatus::Changed, Some(state))
                     | (SessionStatus::Renewed, Some(state)) => {
                         let state: SessionHashMap = state.collect();
-                        debug!("session response: {:?}", &state);
 
-                        res.set_cookie(Cookie::new(COOKIE_KEY, serde_json::to_string(&state)?))
+                        // 编码
+                        let raw_value = serde_json::to_string(&state)?;
+                        // todo session cookie 还需要加密
+                        // cipher...
+                        // base64 编码，因为tide的cookie encode居然保留逗号，但是小程序不接受逗号
+                        let value = base64::encode(raw_value.as_bytes());
+
+                        debug!("session <= {} ({})", &value, &raw_value);
+                        res.set_cookie(Cookie::new(COOKIE_KEY, value));
                     }
                     (SessionStatus::Purged, _) => {
                         res.remove_cookie(Cookie::named(COOKIE_KEY));
-
-                        debug!("session removed!")
+                        debug!("session <= removed!");
                     }
                     // todo: set a new session cookie upon first request (new client)
                     (SessionStatus::Unchanged, _) => (),

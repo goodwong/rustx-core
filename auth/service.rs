@@ -489,6 +489,7 @@ pub mod integrate_with_tide {
                         .cookie(COOKIE_KEY)
                         .map(|c: Cookie| c.value().to_owned())
                         .unwrap_or_default();
+                    debug!("token => {}", &token_str);
                     self.get_identity(&token_str).await.map_err(|e| {
                         tide::Error::from_str(tide::StatusCode::InternalServerError, e)
                     })?
@@ -505,8 +506,8 @@ pub mod integrate_with_tide {
                     None => (),
                 }
                 match identity.get_response().await {
-                    Some(TokenResponse::Set(v, _exp)) => debug!("token response: {:?}", &v),
-                    Some(TokenResponse::Delete) => debug!("token removed!"),
+                    Some(TokenResponse::Set(v, _exp)) => debug!("token <= {}", &v),
+                    Some(TokenResponse::Delete) => debug!("token <= removed!"),
                     None => (),
                 }
 

@@ -122,6 +122,21 @@ fn base62_vs_base64() {
     println!("plain = {:x?}", plain);
     println!("plain = {}", std::str::from_utf8(&plain).unwrap());
 }
+
+#[test]
+fn base64() -> Result<(), Box<dyn std::error::Error>> {
+    env_logger::init();
+
+    let input = "input string...";
+    let encoded = base64::encode(input.as_bytes());
+    debug!("base64 encode: {}", &encoded);
+
+    let bytes = base64::decode(&encoded)?;
+    let plain = std::str::from_utf8(&bytes)?;
+    debug!("base64 decode: {}", plain);
+    Ok(())
+}
+
 /*
 #[test]
 fn nacl() {
