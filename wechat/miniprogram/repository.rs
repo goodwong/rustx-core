@@ -1,14 +1,14 @@
 use super::models::{AnyResult, MiniprogramUser};
 use crate::db_connection::PgPooledConnection;
-use diesel::prelude::*;
 use async_std::task;
+use diesel::prelude::*;
 
 pub async fn find(_open_id: String, conn: PgPooledConnection) -> QueryResult<MiniprogramUser> {
     task::spawn_blocking(move || {
         use crate::diesel_schema::wechat_miniprogram_users::dsl::*;
         wechat_miniprogram_users
             .filter(open_id.eq(_open_id))
-            .first::<MiniprogramUser>(&conn)
+            .first(&conn)
     })
     .await
 }
@@ -27,14 +27,13 @@ pub async fn create(
         };
         diesel::insert_into(wechat_miniprogram_users)
             .values(&insert)
-            .get_result::<MiniprogramUser>(&conn)
+            .get_result(&conn)
             .map_err(Into::into)
     })
     .await
 }
 pub async fn update(u: MiniprogramUser, conn: PgPooledConnection) -> QueryResult<MiniprogramUser> {
-    task::spawn_blocking(move || diesel::update(&u).set(&u).get_result(&conn))
-        .await
+    task::spawn_blocking(move || diesel::update(&u).set(&u).get_result(&conn)).await
 }
 
 // 生存环境，是不允许删除用户资料的，

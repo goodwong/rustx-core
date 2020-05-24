@@ -2,15 +2,15 @@ use super::error::AuthResult;
 use super::models::{User, UserToken};
 use crate::db_connection::PgPooledConnection;
 use crate::diesel_schema::{user_tokens, users};
+use async_std::task;
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
-use async_std::task;
 
 // user...
 pub async fn find_user(user_id: i32, conn: PgPooledConnection) -> QueryResult<User> {
     task::spawn_blocking(move || {
         use crate::diesel_schema::users::dsl::*;
-        users.filter(id.eq(user_id)).first::<User>(&conn)
+        users.filter(id.eq(user_id)).first(&conn)
     })
     .await
 }
@@ -20,7 +20,7 @@ pub async fn find_user_by_username(
 ) -> QueryResult<User> {
     task::spawn_blocking(move || {
         use crate::diesel_schema::users::dsl::*;
-        users.filter(username.eq(_username)).first::<User>(&conn)
+        users.filter(username.eq(_username)).first(&conn)
     })
     .await
 }
@@ -42,7 +42,7 @@ pub async fn create_user(user: InsertUser, conn: PgPooledConnection) -> AuthResu
         use crate::diesel_schema::users::dsl::*;
         diesel::insert_into(users)
             .values(&user)
-            .get_result::<User>(&conn)
+            .get_result(&conn)
             .map_err(Into::into)
     })
     .await
@@ -100,7 +100,7 @@ pub async fn find_refresh_token(
         user_tokens
             .filter(id.eq(refresh_token_id)) // id.eq(...).and(deleted_at.is_null())
             .filter(deleted_at.is_null())
-            .first::<UserToken>(&conn)
+            .first(&conn)
     })
     .await
 }
@@ -119,7 +119,7 @@ pub async fn create_refresh_token(
         use crate::diesel_schema::user_tokens::dsl::*;
         diesel::insert_into(user_tokens)
             .values(&token)
-            .get_result::<UserToken>(&conn)
+            .get_result(&conn)
             .map_err(Into::into)
     })
     .await
