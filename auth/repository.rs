@@ -15,12 +15,14 @@ pub async fn find_user(user_id: i32, conn: PgPooledConnection) -> QueryResult<Us
     .await
 }
 pub async fn find_user_by_username(
-    _username: String,
+    username: String,
     conn: PgPooledConnection,
 ) -> QueryResult<User> {
     task::spawn_blocking(move || {
-        use crate::diesel_schema::users::dsl::*;
-        users.filter(username.eq(_username)).first(&conn)
+        //use crate::diesel_schema::users;
+        users::table
+            .filter(users::username.eq(username))
+            .first(&conn)
     })
     .await
 }
@@ -65,9 +67,9 @@ pub async fn count_user() -> AuthResult<i32> {
 #[cfg(test)]
 use crate::db_connection::PgPool;
 #[cfg(test)]
-pub async fn delete_user_by_username(_username: &str, pool: PgPool) -> AuthResult<()> {
-    let _username = _username.to_owned();
-    match find_user_by_username(_username.to_owned(), pool.get()?).await {
+pub async fn delete_user_by_username(username: &str, pool: PgPool) -> AuthResult<()> {
+    let username = username.to_owned();
+    match find_user_by_username(username.to_owned(), pool.get()?).await {
         Err(diesel::NotFound) => Ok(()),
         Err(e) => Err(Box::new(e)),
         Ok(user) => {
@@ -79,8 +81,8 @@ pub async fn delete_user_by_username(_username: &str, pool: PgPool) -> AuthResul
                     .map_err(|e| format!("{}", e))?;
 
                 // 再删除users
-                use crate::diesel_schema::users::dsl::*;
-                diesel::delete(users.filter(username.eq(_username)))
+                //use crate::diesel_schema::users;
+                diesel::delete(users::table.filter(users::username.eq(username)))
                     .execute(&pool.get()?)
                     .map(|_| ())
                     .map_err(|e| format!("{}", e).into())
