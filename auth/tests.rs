@@ -1,10 +1,10 @@
 use base_62;
 
-use crate::auth::graphql::Context;
 use crate::auth::models::User;
 use crate::auth::repository as user_repository;
 use crate::auth::service::AuthService;
 use crate::db_connection::{establish_connection, PgPool};
+use crate::graphql::Context;
 use crate::wechat::miniprogram::models::MiniprogramUser;
 use crate::wechat::miniprogram::repository as miniprogram_repository;
 

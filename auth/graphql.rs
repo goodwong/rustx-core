@@ -1,12 +1,9 @@
-use crate::api::wechat_miniprogram::{Code2SessionResponse, Miniprogram};
-use crate::auth::graphql::context::Context;
-use crate::auth::models::User as UserModel;
-use crate::auth::repository as user_repository;
-use crate::wechat::miniprogram::models::MiniprogramUser;
-use crate::wechat::miniprogram::repository as mp_repository;
+use crate::api::wechat_miniprogram as api_miniprogram;
+use crate::auth;
+use crate::graphql::Context;
+use crate::wechat::miniprogram;
 use diesel::result::Error as DieselError;
-use juniper;
-use juniper::FieldResult;
+use juniper::{self, FieldResult};
 use serde::{Deserialize, Serialize};
 
 const SESSION_KEY_OPENID: &str = "mp_openid";
@@ -34,8 +31,8 @@ pub struct User {
     #[graphql(description = "用户更新时间")]
     updated_at: String,
 }
-impl From<UserModel> for User {
-    fn from(m: UserModel) -> Self {
+impl From<auth::models::User> for User {
+    fn from(m: auth::models::User) -> Self {
         Self {
             id: m.id,
             username: m.username,
@@ -81,7 +78,7 @@ pub(crate) async fn register(args: RegisterInput, context: &Context) -> FieldRes
             .ok_or("session_key不存在session里")?;
         let iv = args.iv;
         let data = args.encrypted_data;
-        Miniprogram::get_phone_number(&session_key, &iv, &data)?.phone_number
+        api_miniprogram::Miniprogram::get_phone_number(&session_key, &iv, &data)?.phone_number
     };
     let open_id = context
         .session
@@ -125,7 +122,7 @@ impl LoginResult {
 
 // 分离代码，方便测试
 async fn login_by_wechat_miniprogram_openid(
-    mp_session: Code2SessionResponse,
+    mp_session: api_miniprogram::Code2SessionResponse,
     context: &Context,
 ) -> FieldResult<LoginResult> {
     // 设置session_key，后续登陆、解码用到
@@ -135,10 +132,10 @@ async fn login_by_wechat_miniprogram_openid(
         .await?;
 
     // 数据库查询是否有记录
-    match mp_repository::find(mp_session.openid.clone(), context.pool.get()?).await {
+    match miniprogram::repository::find(mp_session.openid.clone(), context.db_pool.get()?).await {
         // 顺利登陆
         Ok(mp_user) => {
-            let user = user_repository::find_user(mp_user.user_id, context.pool.get()?).await?;
+            let user = auth::repository::find_user(mp_user.user_id, context.db_pool.get()?).await?;
             context.identity.login(user.clone()).await?;
             Ok(LoginResult::success(user.into()))
         }
@@ -168,17 +165,18 @@ async fn register_by_wechat_miniprogram_phonenumber(
 ) -> FieldResult<LoginResult> {
     // 根据电话查找exist_user
     // todo: fallback - 根据union_id查找exist_user，暂时不做
-    match user_repository::find_user_by_username(phone_number, context.pool.get()?).await {
+    match auth::repository::find_user_by_username(phone_number, context.db_pool.get()?).await {
         Ok(exist_user) => {
             // 关联exist_user与miniprogram_user
             let mp_user =
-                mp_repository::create(open_id, exist_user.id, context.pool.get()?).await?;
+                miniprogram::repository::create(open_id, exist_user.id, context.db_pool.get()?)
+                    .await?;
             if union_id.is_some() {
-                let update = MiniprogramUser {
+                let update = miniprogram::models::MiniprogramUser {
                     union_id,
                     ..mp_user
                 };
-                mp_repository::update(update, context.pool.get()?).await?;
+                miniprogram::repository::update(update, context.db_pool.get()?).await?;
             }
 
             // 清理session的openid/unionid
@@ -220,18 +218,19 @@ mod tests {
     async fn login_by_wechat_miniprogram_openid() -> TestResult<()> {
         setup();
 
-        let pool = tests::db_pool();
+        let db_pool = tests::db_pool();
 
         // clear up for testing
-        tests::clear_mock_miniprogram_user(MOCK_MP_OPENID, pool.clone()).await?;
-        tests::clear_mock_user(MOCK_USERNAME, pool.clone()).await?;
+        tests::clear_mock_miniprogram_user(MOCK_MP_OPENID, db_pool.clone()).await?;
+        tests::clear_mock_user(MOCK_USERNAME, db_pool.clone()).await?;
 
         // mock user
-        let user = tests::mock_user(MOCK_USERNAME, pool.clone()).await?;
+        let user = tests::mock_user(MOCK_USERNAME, db_pool.clone()).await?;
         // mock miniprogram_user
-        let mp_user = tests::mock_miniprogram_user(MOCK_MP_OPENID, user.id, pool.clone()).await?;
+        let mp_user =
+            tests::mock_miniprogram_user(MOCK_MP_OPENID, user.id, db_pool.clone()).await?;
         // mock context
-        let ctx = tests::mock_context(pool.clone()).await?;
+        let ctx = tests::mock_context(db_pool.clone()).await?;
 
         // success
         let mock_session_key = "mock session_key";
@@ -253,7 +252,7 @@ mod tests {
         );
 
         // failure
-        let ctx = tests::mock_context(pool.clone()).await?;
+        let ctx = tests::mock_context(db_pool.clone()).await?;
         let mock_openid = "mock openid not exist in database";
         let mp_session = Code2SessionResponse {
             openid: mock_openid.to_owned(),
@@ -275,8 +274,8 @@ mod tests {
         );
 
         // clear up
-        tests::clear_mock_miniprogram_user(MOCK_MP_OPENID, pool.clone()).await?;
-        tests::clear_mock_user(MOCK_USERNAME, pool.clone()).await?;
+        tests::clear_mock_miniprogram_user(MOCK_MP_OPENID, db_pool.clone()).await?;
+        tests::clear_mock_user(MOCK_USERNAME, db_pool.clone()).await?;
 
         Ok(())
     }
@@ -285,16 +284,16 @@ mod tests {
     async fn register_by_wechat_miniprogram_phonenumber() -> TestResult<()> {
         setup();
 
-        let pool = tests::db_pool();
+        let db_pool = tests::db_pool();
 
         // clear up for testing
-        tests::clear_mock_miniprogram_user(MOCK_MP_OPENID_2, pool.clone()).await?;
-        tests::clear_mock_user(MOCK_PHONE_NUMBER, pool.clone()).await?;
+        tests::clear_mock_miniprogram_user(MOCK_MP_OPENID_2, db_pool.clone()).await?;
+        tests::clear_mock_user(MOCK_PHONE_NUMBER, db_pool.clone()).await?;
 
         // mock user by phone number
-        tests::mock_user(MOCK_PHONE_NUMBER, pool.clone()).await?;
+        tests::mock_user(MOCK_PHONE_NUMBER, db_pool.clone()).await?;
         // mock context
-        let ctx = tests::mock_context(pool.clone()).await?;
+        let ctx = tests::mock_context(db_pool.clone()).await?;
 
         let phone_number = MOCK_PHONE_NUMBER.to_owned();
         let open_id = MOCK_MP_OPENID_2.to_owned();
@@ -307,8 +306,8 @@ mod tests {
         assert_eq!(ctx.identity.is_login().await, true);
 
         // clear up
-        tests::clear_mock_miniprogram_user(MOCK_MP_OPENID_2, pool.clone()).await?;
-        tests::clear_mock_user(MOCK_PHONE_NUMBER, pool.clone()).await?;
+        tests::clear_mock_miniprogram_user(MOCK_MP_OPENID_2, db_pool.clone()).await?;
+        tests::clear_mock_user(MOCK_PHONE_NUMBER, db_pool.clone()).await?;
 
         Ok(())
     }
