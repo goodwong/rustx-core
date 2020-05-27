@@ -10,25 +10,82 @@ const SESSION_KEY_OPENID: &str = "mp_openid";
 const SESSION_KEY_UNIONID: &str = "mp_unionid";
 const SESSION_KEY_SESSIONKEY: &str = "mp_session_key";
 
+pub struct AuthGraphql;
+#[juniper::graphql_object(Context = Context)]
+impl AuthGraphql {
+    pub(crate) async fn query_me(context: &Context) -> FieldResult<User> {
+        context
+            .identity
+            .user()
+            .await
+            .map(From::from)
+            .ok_or_else(|| "未登录".into())
+    }
+
+    /// login 登录
+    pub(crate) async fn login(js_code: String, context: &Context) -> FieldResult<LoginResult> {
+        let miniprogram_session = context.miniprogram.code_to_session(&js_code).await?;
+        login_by_wechat_miniprogram_openid(miniprogram_session, context).await
+    }
+
+    /// register 注册
+    ///
+    /// 针对首次在小程序登陆的情况
+    /// 需要进一步提供电话号码进行匹配登陆
+    pub(crate) async fn register(
+        args: RegisterInput,
+        context: &Context,
+    ) -> FieldResult<LoginResult> {
+        let phone_number = {
+            let session_key = context
+                .session
+                .get::<String>(SESSION_KEY_SESSIONKEY)
+                .await?
+                .ok_or("session_key不存在session里")?;
+            let iv = args.iv;
+            let data = args.encrypted_data;
+            api_miniprogram::Miniprogram::get_phone_number(&session_key, &iv, &data)?.phone_number
+        };
+        let open_id = context
+            .session
+            .get::<String>(SESSION_KEY_OPENID)
+            .await?
+            .ok_or("open_id不存在session里")?;
+        let union_id = context.session.get::<String>(SESSION_KEY_UNIONID).await?;
+
+        register_by_wechat_miniprogram_phonenumber(phone_number, open_id, union_id, context).await
+    }
+
+    pub(crate) async fn logout(context: &Context) -> FieldResult<bool> {
+        if context.identity.is_login().await {
+            context.identity.logout().await?;
+            context.session.purge().await;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+}
+
 #[derive(juniper::GraphQLObject)]
 #[graphql(description = "用户类型")]
 pub struct User {
-    #[graphql(description = "用户ID")]
+    /// 用户ID
     id: i32,
 
-    #[graphql(description = "用户名")]
+    /// 用户名
     username: String,
 
-    #[graphql(description = "用户昵称")]
+    /// 用户昵称
     name: String,
 
-    #[graphql(description = "用户头像")]
+    /// 用户头像
     avatar: String,
 
-    #[graphql(description = "用户创建时间")]
+    /// 用户创建时间
     created_at: String,
 
-    #[graphql(description = "用户更新时间")]
+    /// 用户更新时间
     updated_at: String,
 }
 impl From<auth::models::User> for User {
@@ -44,64 +101,21 @@ impl From<auth::models::User> for User {
     }
 }
 
-pub(crate) async fn query_me(context: &Context) -> FieldResult<User> {
-    context
-        .identity
-        .user()
-        .await
-        .map(From::from)
-        .ok_or_else(|| "未登录".into())
-}
-
-/// login 登录
-/// 结果：true - 登录成功; false - 登录失败，需要提供手机号码注册登录；如果发生error，例如数据库连接错误，请重试
-pub(crate) async fn login(js_code: String, context: &Context) -> FieldResult<LoginResult> {
-    let miniprogram_session = context.miniprogram.code_to_session(&js_code).await?;
-    login_by_wechat_miniprogram_openid(miniprogram_session, context).await
-}
-
 #[derive(Serialize, Deserialize, Debug, juniper::GraphQLInputObject)]
 #[serde(rename_all = "camelCase")]
+/// 参数见小程序`bindGetPhoneNumber`回调的e.detail
 pub(crate) struct RegisterInput {
     iv: String,
     encrypted_data: String,
 }
 
-/// register
-/// by miniprogram phoneNumber
-pub(crate) async fn register(args: RegisterInput, context: &Context) -> FieldResult<LoginResult> {
-    let phone_number = {
-        let session_key = context
-            .session
-            .get::<String>(SESSION_KEY_SESSIONKEY)
-            .await?
-            .ok_or("session_key不存在session里")?;
-        let iv = args.iv;
-        let data = args.encrypted_data;
-        api_miniprogram::Miniprogram::get_phone_number(&session_key, &iv, &data)?.phone_number
-    };
-    let open_id = context
-        .session
-        .get::<String>(SESSION_KEY_OPENID)
-        .await?
-        .ok_or("open_id不存在session里")?;
-    let union_id = context.session.get::<String>(SESSION_KEY_UNIONID).await?;
-
-    register_by_wechat_miniprogram_phonenumber(phone_number, open_id, union_id, context).await
-}
-
-pub(crate) async fn logout(context: &Context) -> FieldResult<bool> {
-    if context.identity.is_login().await {
-        context.identity.logout().await?;
-        context.session.purge().await;
-        Ok(true)
-    } else {
-        Ok(false)
-    }
-}
-
 #[derive(juniper::GraphQLObject)]
+/// 登陆/注册结果
+///
+/// error：例如数据库连接错误，请重试
 pub(crate) struct LoginResult {
+    /// true：登录成功;  
+    /// false：登录失败，需要提供手机号码注册登录；
     success: bool,
     user: Option<User>,
 }
