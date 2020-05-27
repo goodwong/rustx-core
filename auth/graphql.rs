@@ -10,9 +10,9 @@ const SESSION_KEY_OPENID: &str = "mp_openid";
 const SESSION_KEY_UNIONID: &str = "mp_unionid";
 const SESSION_KEY_SESSIONKEY: &str = "mp_session_key";
 
-pub struct AuthGraphql;
+pub struct AuthResolver;
 #[juniper::graphql_object(Context = Context)]
-impl AuthGraphql {
+impl AuthResolver {
     pub(crate) async fn query_me(context: &Context) -> FieldResult<User> {
         context
             .identity
@@ -68,7 +68,7 @@ impl AuthGraphql {
 }
 
 #[derive(juniper::GraphQLObject)]
-#[graphql(description = "用户类型")]
+/// 用户类型
 pub struct User {
     /// 用户ID
     id: i32,
