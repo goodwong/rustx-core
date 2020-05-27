@@ -1,7 +1,7 @@
 use crate::api::wechat_miniprogram::Miniprogram;
-use crate::auth::graphql::Session;
 use crate::auth::service::Identity;
 use crate::db_connection::PgPool;
+use crate::http::session::Session;
 
 pub struct Context {
     pub pool: PgPool,

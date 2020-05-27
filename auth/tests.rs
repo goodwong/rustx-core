@@ -125,7 +125,7 @@ fn base62_vs_base64() {
 
 #[test]
 fn base64() -> Result<(), Box<dyn std::error::Error>> {
-    env_logger::init();
+    env_logger::try_init().ok();
 
     let input = "input string...";
     let encoded = base64::encode(input.as_bytes());
