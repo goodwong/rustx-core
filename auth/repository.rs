@@ -100,8 +100,9 @@ pub async fn find_refresh_token(
     task::spawn_blocking(move || {
         use crate::diesel_schema::user_tokens::dsl::*;
         user_tokens
-            .filter(id.eq(refresh_token_id)) // id.eq(...).and(deleted_at.is_null())
-            .filter(deleted_at.is_null())
+            .filter(id.eq(refresh_token_id))
+            .filter(deleted_at.is_null()) // soft delete
+            // 另一种写法 .filter(id.eq(...).and(deleted_at.is_null()))
             .first(&conn)
     })
     .await
@@ -132,7 +133,7 @@ pub async fn destroy_refresh_token(token_id: i32, conn: PgPooledConnection) -> A
         diesel::update(
             user_tokens
                 .filter(id.eq(token_id))
-                .filter(deleted_at.is_null()),
+                .filter(deleted_at.is_null()), // soft delete
         )
         .set(deleted_at.eq(Some(Utc::now())))
         .execute(&conn)
@@ -152,7 +153,7 @@ pub async fn renew_refresh_token(
         diesel::update(
             user_tokens
                 .filter(id.eq(token_id))
-                .filter(deleted_at.is_null()),
+                .filter(deleted_at.is_null()), // soft delete
         )
         .set((hash.eq(hash_str), issued_at.eq(now)))
         .execute(&conn)
