@@ -67,8 +67,8 @@ impl AuthResolver {
     }
 }
 
-#[derive(juniper::GraphQLObject)]
 /// 用户类型
+#[derive(juniper::GraphQLObject)]
 pub struct User {
     /// 用户ID
     id: i32,
@@ -101,18 +101,18 @@ impl From<auth::models::User> for User {
     }
 }
 
+/// 参数见小程序`bindGetPhoneNumber`回调的e.detail
 #[derive(Serialize, Deserialize, Debug, juniper::GraphQLInputObject)]
 #[serde(rename_all = "camelCase")]
-/// 参数见小程序`bindGetPhoneNumber`回调的e.detail
 pub(crate) struct RegisterInput {
     iv: String,
     encrypted_data: String,
 }
 
-#[derive(juniper::GraphQLObject)]
 /// 登陆/注册结果
 ///
 /// error：例如数据库连接错误，请重试
+#[derive(juniper::GraphQLObject)]
 pub(crate) struct LoginResult {
     /// true：登录成功;  
     /// false：登录失败，需要提供手机号码注册登录；
