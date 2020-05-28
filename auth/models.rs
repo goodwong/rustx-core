@@ -5,9 +5,11 @@ use chrono::{DateTime, Utc};
 #[derive(Identifiable, Queryable, Clone, PartialEq, Debug)]
 pub struct User {
     pub id: i32,
+
     pub username: String,
     pub name: String,
     pub avatar: String,
+
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -19,8 +21,10 @@ pub struct User {
 pub struct UserToken {
     pub id: i32,
     pub user_id: i32,
+
     pub device: String,
     pub hash: String,
+
     pub created_at: DateTime<Utc>,
     pub issued_at: DateTime<Utc>,
     pub deleted_at: Option<DateTime<Utc>>,
