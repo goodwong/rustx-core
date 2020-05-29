@@ -434,6 +434,8 @@ mod tests {
 // 集成到tide
 pub mod integrate_with_tide {
     use super::{AuthService, Identity, TokenResponse};
+    use crate::auth::token::REFRESH_TOKEN_LIFE_DAYS;
+    use chrono::Duration;
     use futures::future::BoxFuture;
     use std::fmt;
     use tide::{http::Cookie, Next, Request};
@@ -465,7 +467,12 @@ pub mod integrate_with_tide {
                 // set to cookie response
                 match identity.get_response().await {
                     // todo：设置cookie的失效时间
-                    Some(TokenResponse::Set(v, _exp)) => res.set_cookie(Cookie::new(COOKIE_KEY, v)),
+                    Some(TokenResponse::Set(v, _exp)) => res.set_cookie(
+                        Cookie::build(COOKIE_KEY, v)
+                            .max_age(Duration::days(REFRESH_TOKEN_LIFE_DAYS))
+                            .http_only(true)
+                            .finish(),
+                    ),
                     Some(TokenResponse::Delete) => res.remove_cookie(Cookie::named(COOKIE_KEY)),
                     None => (),
                 }

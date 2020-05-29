@@ -16,6 +16,7 @@
 use super::{Session, SessionInner, SessionStatus};
 use async_std::sync::RwLock;
 use base64;
+use chrono::Duration;
 use futures::future::BoxFuture;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -25,6 +26,7 @@ type SessionHashMap = HashMap<String, String>;
 
 const KEY_LENGTH: usize = 32;
 const COOKIE_KEY: &str = "session";
+const SESSION_LIFE_DAYS: i64 = 30;
 
 #[derive(Debug)]
 struct Config {
@@ -96,7 +98,12 @@ impl<State: Send + Sync + 'static> tide::Middleware<State> for CookieSession {
                     let value = base64::encode(raw_value.as_bytes());
 
                     debug!("session <= {} ({})", &value, &raw_value);
-                    res.set_cookie(Cookie::new(COOKIE_KEY, value));
+                    res.set_cookie(
+                        Cookie::build(COOKIE_KEY, value)
+                            .max_age(Duration::days(SESSION_LIFE_DAYS))
+                            .http_only(true)
+                            .finish(),
+                    );
                 }
                 (SessionStatus::Purged, _) => {
                     res.remove_cookie(Cookie::named(COOKIE_KEY));
