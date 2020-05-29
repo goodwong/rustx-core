@@ -103,7 +103,7 @@ impl Token {
 
     pub fn verify(&self, refresh_token: &UserToken) -> bool {
         let is_expired = refresh_token.deleted_at.is_some()
-            || Utc::now() > refresh_token.issued_at + Duration::hours(REFRESH_TOKEN_LIFE_DAYS);
+            || Utc::now() > refresh_token.issued_at + Duration::days(REFRESH_TOKEN_LIFE_DAYS);
 
         !is_expired && bcrypt::verify(self.nonce, &refresh_token.hash).unwrap_or(false)
     }
