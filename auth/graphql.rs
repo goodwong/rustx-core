@@ -13,7 +13,7 @@ const SESSION_KEY_SESSIONKEY: &str = "mp_session_key";
 pub struct AuthResolver;
 #[juniper::graphql_object(Context = Context)]
 impl AuthResolver {
-    pub(crate) async fn query_me(context: &Context) -> FieldResult<User> {
+    pub(crate) async fn me(context: &Context) -> FieldResult<User> {
         context
             .identity
             .user()
