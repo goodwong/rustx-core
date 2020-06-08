@@ -104,24 +104,28 @@ impl Identity {
 
     // 登陆（在具体登陆的方式里调用该方法）
     pub async fn login(&self, user: User) -> AuthResult<()> {
-        // token
         let (nonce, hash) = Token::nonce_pair();
-        let insert = InsertToken {
-            user_id: user.id,
-            device: Default::default(),
-            hash,
-        };
-        let refresh_token = create_refresh_token(insert, self.0.config.db.get()?).await?;
 
-        // pack token string
+        // refresh token
+        let refresh_token = {
+            let insert = InsertToken {
+                user_id: user.id,
+                device: Default::default(),
+                hash,
+            };
+            create_refresh_token(insert, self.0.config.db.get()?).await?
+        };
+
+        // token
         let token = Token {
             nonce,
             user_id: user.id as i64,
             refresh_token_id: refresh_token.id as i64,
             issued_at: refresh_token.issued_at.timestamp(),
         };
-        // mut self
         let (token_str, expires) = token.to_string(&self.0.config.cipher_key)?;
+
+        // mut self
         self.set_response(Some(TokenResponse::Set(token_str, expires)))
             .await;
         self.set_token(Some(token)).await;
