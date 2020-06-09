@@ -71,9 +71,21 @@ impl Identity {
         self.get_token().await.is_some()
     }
 
+    pub async fn is_login_or_err(&self) -> AuthResult<()> {
+        if self.is_login().await {
+            Ok(())
+        } else {
+            Err("未登录".into())
+        }
+    }
+
     // 返回登录用户的id
     pub async fn user_id(&self) -> Option<i32> {
         self.get_token().await.map(|t| t.user_id as i32)
+    }
+
+    pub async fn user_id_or_err(&self) -> AuthResult<i32> {
+        self.user_id().await.ok_or("未登录").map_err(Into::into)
     }
 
     // 试图从数据库查询登陆的用户，并记住
@@ -100,6 +112,10 @@ impl Identity {
         } else {
             None
         }
+    }
+
+    pub async fn user_or_err(&self) -> AuthResult<User> {
+        self.user().await.ok_or("未登录").map_err(Into::into)
     }
 
     // 登陆（在具体登陆的方式里调用该方法）
