@@ -7,10 +7,9 @@ use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 
 // user...
-pub async fn find_user(user_id: i32, conn: PgPooledConnection) -> QueryResult<User> {
+pub async fn find_user(id: i32, conn: PgPooledConnection) -> QueryResult<User> {
     task::spawn_blocking(move || {
-        use crate::diesel_schema::users::dsl::*;
-        users.filter(id.eq(user_id)).first(&conn)
+        users::table.find(id).first(&conn)
     })
     .await
 }
@@ -94,14 +93,13 @@ pub async fn delete_user_by_username(username: &str, pool: PgPool) -> AuthResult
 
 // token...
 pub async fn find_refresh_token(
-    refresh_token_id: i32,
+    id: i32,
     conn: PgPooledConnection,
 ) -> QueryResult<UserToken> {
     task::spawn_blocking(move || {
-        use crate::diesel_schema::user_tokens::dsl::*;
-        user_tokens
-            .filter(id.eq(refresh_token_id))
-            .filter(deleted_at.is_null()) // soft delete
+        user_tokens::table
+            .find(id)
+            .filter(user_tokens::deleted_at.is_null()) // soft delete
             // 另一种写法 .filter(id.eq(...).and(deleted_at.is_null()))
             .first(&conn)
     })
@@ -127,15 +125,14 @@ pub async fn create_refresh_token(
     })
     .await
 }
-pub async fn destroy_refresh_token(token_id: i32, conn: PgPooledConnection) -> AuthResult<()> {
+pub async fn destroy_refresh_token(id: i32, conn: PgPooledConnection) -> AuthResult<()> {
     task::spawn_blocking(move || {
-        use crate::diesel_schema::user_tokens::dsl::*;
         diesel::update(
-            user_tokens
-                .filter(id.eq(token_id))
-                .filter(deleted_at.is_null()), // soft delete
+            user_tokens::table
+                .find(id)
+                .filter(user_tokens::deleted_at.is_null()), // soft delete
         )
-        .set(deleted_at.eq(Some(Utc::now())))
+        .set(user_tokens::deleted_at.eq(Some(Utc::now())))
         .execute(&conn)
         .map(|_| ())
         .map_err(Into::into)
@@ -143,19 +140,18 @@ pub async fn destroy_refresh_token(token_id: i32, conn: PgPooledConnection) -> A
     .await
 }
 pub async fn renew_refresh_token(
-    token_id: i32,
+    id: i32,
     hash_str: String,
     conn: PgPooledConnection,
 ) -> AuthResult<DateTime<Utc>> {
     task::spawn_blocking(move || {
-        use crate::diesel_schema::user_tokens::dsl::*;
         let now: DateTime<Utc> = Utc::now();
         diesel::update(
-            user_tokens
-                .filter(id.eq(token_id))
-                .filter(deleted_at.is_null()), // soft delete
+            user_tokens::table
+                .find(id)
+                .filter(user_tokens::deleted_at.is_null()), // soft delete
         )
-        .set((hash.eq(hash_str), issued_at.eq(now)))
+        .set((user_tokens::hash.eq(hash_str), user_tokens::issued_at.eq(now)))
         .execute(&conn)
         .map(|_| now)
         .map_err(Into::into)
