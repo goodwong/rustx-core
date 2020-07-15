@@ -1,12 +1,12 @@
 use base_62;
 
-use crate::auth::models::User;
-use crate::auth::repository as user_repository;
-use crate::auth::service::AuthService;
+use crate::core::auth::models::User;
+use crate::core::auth::repository as user_repository;
+use crate::core::auth::service::AuthService;
 use crate::db_connection::{establish_connection, PgPool};
 use crate::graphql::Context;
-use crate::wechat::miniprogram::models::MiniprogramUser;
-use crate::wechat::miniprogram::repository as miniprogram_repository;
+use crate::core::wechat::miniprogram::models::MiniprogramUser;
+use crate::core::wechat::miniprogram::repository as miniprogram_repository;
 
 pub type TestResult<O> = Result<O, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -58,7 +58,7 @@ pub async fn mock_context(db_pool: PgPool) -> TestResult<Context> {
     let auth = auth_service(db_pool.clone());
     let identity = auth.get_identity("an invalid token").await?;
 
-    use crate::api::wechat_miniprogram::{Config, Miniprogram};
+    use crate::core::api::wechat_miniprogram::{Config, Miniprogram};
     let miniprogram = Miniprogram::new(Config::from_env());
 
     Ok(Context::new(

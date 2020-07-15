@@ -1,7 +1,7 @@
 /// 集成到tide
 ///
 /// ```rs
-/// use crate::http::session::integrate_with_tide::{CookieSession, RequestExt as RequestExtSession};
+/// use crate::core::http::session::integrate_with_tide::{CookieSession, RequestExt as RequestExtSession};
 /// let session_middleware = CookieSession::new(&cipher_key);
 /// let app = tide::new().middleware(session_middleware);
 ///

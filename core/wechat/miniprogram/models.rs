@@ -1,4 +1,4 @@
-use crate::auth::models::User;
+use crate::core::auth::models::User;
 use crate::diesel_schema::wechat_miniprogram_users;
 
 pub(super) type AnyResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;

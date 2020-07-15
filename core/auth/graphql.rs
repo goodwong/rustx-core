@@ -1,7 +1,7 @@
-use crate::api::wechat_miniprogram as api_miniprogram;
-use crate::auth;
+use crate::core::api::wechat_miniprogram as api_miniprogram;
+use crate::core::auth;
 use crate::graphql::Context;
-use crate::wechat::miniprogram;
+use crate::core::wechat::miniprogram;
 use diesel::result::Error as DieselError;
 use juniper::{self, FieldResult};
 use serde::{Deserialize, Serialize};
@@ -214,9 +214,9 @@ async fn register_by_wechat_miniprogram_phonenumber(
 #[cfg(test)]
 mod tests {
     use super::{SESSION_KEY_OPENID, SESSION_KEY_SESSIONKEY};
-    use crate::api::wechat_miniprogram::Code2SessionResponse;
-    use crate::auth::tests;
-    use crate::auth::tests::TestResult;
+    use crate::core::api::wechat_miniprogram::Code2SessionResponse;
+    use crate::core::auth::tests;
+    use crate::core::auth::tests::TestResult;
 
     const MOCK_USERNAME: &str = "auth_mock_user_username";
     const MOCK_PHONE_NUMBER: &str = "18899990000";

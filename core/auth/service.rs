@@ -307,8 +307,8 @@ mod tests {
     use super::{AuthService, TokenResponse};
     use chrono::{Duration, Utc};
 
-    use crate::auth::tests;
-    use crate::auth::tests::TestResult;
+    use crate::core::auth::tests;
+    use crate::core::auth::tests::TestResult;
 
     const MOCK_USERNAME: &str = "service_mock_user_username";
 
@@ -454,7 +454,7 @@ mod tests {
 // 集成到tide
 pub mod integrate_with_tide {
     use super::{AuthService, Identity, TokenResponse};
-    use crate::auth::token::REFRESH_TOKEN_LIFE_DAYS;
+    use crate::core::auth::token::REFRESH_TOKEN_LIFE_DAYS;
     use chrono::Duration;
     use futures::future::BoxFuture;
     use std::fmt;
