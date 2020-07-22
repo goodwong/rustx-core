@@ -305,6 +305,7 @@ mod tests {
     use super::super::repository::{create_refresh_token, InsertToken};
     use super::super::token::{Token, TOKEN_LIFE_HOURS};
     use super::{AuthService, TokenResponse};
+    use crate::db_connection::tests as db_tests;
     use chrono::{Duration, Utc};
 
     use crate::core::auth::tests;
@@ -320,7 +321,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn invalid_cipher_key() {
-        let pool = tests::db_pool();
+        let pool = db_tests::db_pool();
         // should be panicked here
         // because of invalid key length
         AuthService::new(pool, "invalid key length");
@@ -330,7 +331,7 @@ mod tests {
     async fn login() -> TestResult<()> {
         setup();
 
-        let pool = tests::db_pool();
+        let pool = db_tests::db_pool();
 
         // clear up for testing
         tests::clear_mock_user(MOCK_USERNAME, pool.clone()).await?;

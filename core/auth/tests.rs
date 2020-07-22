@@ -3,21 +3,14 @@ use base_62;
 use crate::core::auth::models::User;
 use crate::core::auth::repository as user_repository;
 use crate::core::auth::service::AuthService;
-use crate::db_connection::{establish_connection, PgPool};
-use crate::graphql::Context;
 use crate::core::wechat::miniprogram::models::MiniprogramUser;
 use crate::core::wechat::miniprogram::repository as miniprogram_repository;
+use crate::db_connection::tests as db_tests;
+use crate::db_connection::PgPool;
+use crate::graphql::Context;
+use sqlx::postgres::PgPool as SqlxPgPool;
 
 pub type TestResult<O> = Result<O, Box<dyn std::error::Error + Send + Sync>>;
-
-pub fn db_pool() -> PgPool {
-    use dotenv::dotenv;
-    use std::env;
-
-    dotenv().ok();
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    establish_connection(database_url)
-}
 
 pub fn auth_service(pool: PgPool) -> AuthService {
     let cipher_key = "Q+mvRWovv4NHANIuevkXtAmC3r2wp8bjyrKCPTgm7m0=";
@@ -54,7 +47,7 @@ pub async fn clear_mock_miniprogram_user(open_id: &str, pool: PgPool) -> TestRes
         .map_err(Into::into)
 }
 
-pub async fn mock_context(db_pool: PgPool) -> TestResult<Context> {
+pub async fn mock_context(db_pool: PgPool, sqlx_pool: SqlxPgPool) -> TestResult<Context> {
     let auth = auth_service(db_pool.clone());
     let identity = auth.get_identity("an invalid token").await?;
 
@@ -63,6 +56,7 @@ pub async fn mock_context(db_pool: PgPool) -> TestResult<Context> {
 
     Ok(Context::new(
         db_pool,
+        sqlx_pool,
         identity,
         miniprogram,
         Default::default(),
@@ -71,7 +65,7 @@ pub async fn mock_context(db_pool: PgPool) -> TestResult<Context> {
 
 #[async_std::test]
 async fn clear_mock_user_test() {
-    let pool = db_pool();
+    let pool = db_tests::db_pool();
 
     clear_mock_user("not_exist_users_username", pool)
         .await

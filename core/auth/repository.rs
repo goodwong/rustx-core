@@ -8,10 +8,7 @@ use diesel::prelude::*;
 
 // user...
 pub async fn find_user(id: i32, conn: PgPooledConnection) -> QueryResult<User> {
-    task::spawn_blocking(move || {
-        users::table.find(id).first(&conn)
-    })
-    .await
+    task::spawn_blocking(move || users::table.find(id).first(&conn)).await
 }
 pub async fn find_user_by_username(
     username: String,
@@ -92,10 +89,7 @@ pub async fn delete_user_by_username(username: &str, pool: PgPool) -> AuthResult
 }
 
 // token...
-pub async fn find_refresh_token(
-    id: i32,
-    conn: PgPooledConnection,
-) -> QueryResult<UserToken> {
+pub async fn find_refresh_token(id: i32, conn: PgPooledConnection) -> QueryResult<UserToken> {
     task::spawn_blocking(move || {
         user_tokens::table
             .find(id)
@@ -151,7 +145,10 @@ pub async fn renew_refresh_token(
                 .find(id)
                 .filter(user_tokens::deleted_at.is_null()), // soft delete
         )
-        .set((user_tokens::hash.eq(hash_str), user_tokens::issued_at.eq(now)))
+        .set((
+            user_tokens::hash.eq(hash_str),
+            user_tokens::issued_at.eq(now),
+        ))
         .execute(&conn)
         .map(|_| now)
         .map_err(Into::into)

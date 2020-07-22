@@ -1,7 +1,7 @@
 use crate::core::api::wechat_miniprogram as api_miniprogram;
 use crate::core::auth;
-use crate::graphql::Context;
 use crate::core::wechat::miniprogram;
+use crate::graphql::Context;
 use diesel::result::Error as DieselError;
 use juniper::{self, FieldResult};
 use serde::{Deserialize, Serialize};
@@ -217,6 +217,7 @@ mod tests {
     use crate::core::api::wechat_miniprogram::Code2SessionResponse;
     use crate::core::auth::tests;
     use crate::core::auth::tests::TestResult;
+    use crate::db_connection::tests as db_tests;
 
     const MOCK_USERNAME: &str = "auth_mock_user_username";
     const MOCK_PHONE_NUMBER: &str = "18899990000";
@@ -232,7 +233,8 @@ mod tests {
     async fn login_by_wechat_miniprogram_openid() -> TestResult<()> {
         setup();
 
-        let db_pool = tests::db_pool();
+        let db_pool = db_tests::db_pool();
+        let sqlx_pool = db_tests::sqlx_pool().await;
 
         // clear up for testing
         tests::clear_mock_miniprogram_user(MOCK_MP_OPENID, db_pool.clone()).await?;
@@ -244,7 +246,7 @@ mod tests {
         let mp_user =
             tests::mock_miniprogram_user(MOCK_MP_OPENID, user.id, db_pool.clone()).await?;
         // mock context
-        let ctx = tests::mock_context(db_pool.clone()).await?;
+        let ctx = tests::mock_context(db_pool.clone(), sqlx_pool.clone()).await?;
 
         // success
         let mock_session_key = "mock session_key";
@@ -266,7 +268,7 @@ mod tests {
         );
 
         // failure
-        let ctx = tests::mock_context(db_pool.clone()).await?;
+        let ctx = tests::mock_context(db_pool.clone(), sqlx_pool.clone()).await?;
         let mock_openid = "mock openid not exist in database";
         let mp_session = Code2SessionResponse {
             openid: mock_openid.to_owned(),
@@ -298,7 +300,8 @@ mod tests {
     async fn register_by_wechat_miniprogram_phonenumber() -> TestResult<()> {
         setup();
 
-        let db_pool = tests::db_pool();
+        let db_pool = db_tests::db_pool();
+        let sqlx_pool = db_tests::sqlx_pool().await;
 
         // clear up for testing
         tests::clear_mock_miniprogram_user(MOCK_MP_OPENID_2, db_pool.clone()).await?;
@@ -307,7 +310,7 @@ mod tests {
         // mock user by phone number
         tests::mock_user(MOCK_PHONE_NUMBER, db_pool.clone()).await?;
         // mock context
-        let ctx = tests::mock_context(db_pool.clone()).await?;
+        let ctx = tests::mock_context(db_pool.clone(), sqlx_pool.clone()).await?;
 
         let phone_number = MOCK_PHONE_NUMBER.to_owned();
         let open_id = MOCK_MP_OPENID_2.to_owned();
