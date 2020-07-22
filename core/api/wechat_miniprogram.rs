@@ -201,6 +201,7 @@ mod tests {
     }
 
     #[async_std::test]
+    #[ignore = "需要提供JS_CODE=xxx"]
     async fn code_to_session() -> TestResult<()> {
         setup();
 
@@ -210,10 +211,10 @@ mod tests {
         assert!(invalid_result.is_err());
 
         // check valid code
-        if let Ok(code) = env::var("JS_CODE") {
-            let session = app.code_to_session(&code).await?;
-            info!("session: {:?}", session);
-        }
+        let code = env::var("JS_CODE").expect("JS_CODE is missing!");
+        let session = app.code_to_session(&code).await?;
+        info!("session: {:?}", session);
+
         Ok(())
     }
 
