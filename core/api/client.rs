@@ -54,6 +54,7 @@ impl Client {
     #[cfg(test)]
     pub(crate) async fn set_invalid_access_token(&self) {
         let mut token = self.token.0.write().await;
+        // 仅仅将token的值设置为错误的，但是有效期不变，让sdk认为这是一个正确的token而发出去，知道接口方面返回这是invalid_token
         token.access_token = "invalid_access_token".to_owned();
     }
 }

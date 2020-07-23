@@ -98,10 +98,34 @@ pub struct UserRole {
     group_name: String, // 角色组名称
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Microapp {
+    pub app_icon: String,                 // 应用图标
+    pub agent_id: i32,                    // 应用实例化id
+    pub app_desc: String,                 // 应用描述
+    pub is_self: bool,                    // 表示是否是自建应用
+    pub name: String,                     // 应用名称
+    pub homepage_link: Option<String>,    // 应用的移动端主页
+    pub pc_homepage_link: Option<String>, // 应用的pc端主页
+    pub app_status: i32,                  // 应用状态， 1表示启用 0表示停用
+    pub omp_link: Option<String>,         // 应用的OA后台管理主页
+}
 impl Dingtalk {
     pub async fn user_info(&self, user_id: String) -> ClientResult<UserInfo> {
         let url = "https://oapi.dingtalk.com/user/get?access_token=ACCESS_TOKEN&userid=USERID";
         self.client.get(&url.replace("USERID", &user_id)).await
+    }
+    pub async fn microapp_list(&self) -> ClientResult<Vec<Microapp>> {
+        let url = "https://oapi.dingtalk.com/microapp/list?access_token=ACCESS_TOKEN";
+
+        #[derive(Serialize, Deserialize, Debug)]
+        #[serde(rename_all = "camelCase")]
+        struct ApiResult {
+            app_list: Vec<Microapp>,
+        }
+        let resp = self.client.post::<(), ApiResult>(url, None).await?;
+        Ok(resp.app_list)
     }
 }
 
@@ -130,22 +154,25 @@ mod tests {
         let cfg = Config::from_env();
         let dd = Dingtalk::new(cfg);
 
-        info!("access_token: {}", dd.access_token().await?);
+        dbg!(dd.access_token().await?);
         Ok(())
     }
 
     #[async_std::test]
+    #[ignore = "需要钉钉后台设置白名单ip才能测试"]
     async fn auto_refresh_access_token() -> TestResult<()> {
         setup();
 
         let dd = Dingtalk::new(Config::from_env());
         dd.access_token().await?;
         dd.set_invalid_access_token().await;
-        let _ = dd.user_info("manager7140".to_string()).await?;
+        let app_list = dd.microapp_list().await?;
+        dbg!(app_list);
         Ok(())
     }
 
     #[async_std::test]
+    #[ignore = "需要钉钉后台设置白名单ip才能测试"]
     async fn get_user_info() -> TestResult<()> {
         setup();
 
